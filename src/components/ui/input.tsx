@@ -1,22 +1,37 @@
-import * as React from "react";
+import type { InputHTMLAttributes, ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 
-import { cn } from "@/lib/utils";
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  error?: string;
+  hint?: string;
+  rightElement?: ReactNode;
+}
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
+export function Input({ label, error, hint, rightElement, className, ...props }: InputProps) {
+  return (
+    <label className="flex w-full flex-col gap-1.5 text-sm text-slate-800">
+      <span className="font-semibold text-slate-800">{label}</span>
+      <span
         className={cn(
-          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className,
+          'relative flex h-11 items-center rounded-xl border bg-white px-3.5 transition-all',
+          error
+            ? 'border-rose-400 ring-2 ring-rose-100'
+            : 'border-slate-300 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100',
         )}
-        ref={ref}
-        {...props}
-      />
-    );
-  },
-);
-Input.displayName = "Input";
-
-export { Input };
+      >
+        <input
+          className={cn(
+            'h-full w-full bg-transparent text-[15px] text-slate-900 placeholder:text-slate-500',
+            rightElement ? 'pr-10' : '',
+            className,
+          )}
+          {...props}
+        />
+        {rightElement ? <span className="absolute right-3.5 text-slate-500">{rightElement}</span> : null}
+      </span>
+      {error ? <span className="text-xs text-rose-500">{error}</span> : null}
+      {!error && hint ? <span className="text-xs text-slate-500">{hint}</span> : null}
+    </label>
+  );
+}

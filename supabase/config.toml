@@ -1,0 +1,96 @@
+project_id = "qabvfgfalendzxzcaeul"
+
+# These functions authenticate inside the handler using the incoming
+# Authorization header and `auth.getUser()`. Disabling gateway JWT
+# verification avoids false 401 "invalid JWT" responses before the
+# function code runs.
+[functions.complete-signup]
+verify_jwt = false
+
+[functions.get-user-workspace]
+verify_jwt = false
+
+[functions.records-config]
+verify_jwt = false
+
+[functions.records-list]
+verify_jwt = false
+
+[functions.record-get]
+verify_jwt = false
+
+[functions.record-create]
+verify_jwt = false
+
+[functions.record-update]
+verify_jwt = false
+
+[functions.record-add-note]
+verify_jwt = false
+
+[functions.record-create-task]
+verify_jwt = false
+
+[functions.record-move-stage]
+verify_jwt = false
+
+[functions.import-job-create]
+verify_jwt = false
+
+[functions.voice-number-list]
+verify_jwt = false
+
+[functions.voice-number-search]
+verify_jwt = false
+
+[functions.voice-number-purchase]
+verify_jwt = false
+
+[functions.voice-number-update]
+verify_jwt = false
+
+[functions.voice-number-reconcile]
+verify_jwt = false
+
+[functions.voice-agent-list]
+verify_jwt = false
+
+[functions.voice-agent-get]
+verify_jwt = false
+
+[functions.voice-agent-create]
+verify_jwt = false
+
+[functions.voice-agent-update]
+verify_jwt = false
+
+[functions.voice-agent-bind-number]
+verify_jwt = false
+
+[functions.voice-agent-set-mappings]
+verify_jwt = false
+
+[functions.telnyx-voice-webhook]
+verify_jwt = false
+
+[functions.voice-call-list]
+verify_jwt = false
+
+[functions.voice-call-get]
+verify_jwt = false
+
+[functions.voice-call-retry-lead-create]
+verify_jwt = false
+
+[functions.voice-call-retry-action]
+verify_jwt = false
+
+[functions.voice-call-resolve-review]
+verify_jwt = false
+
+
+[functions.voice-agent-delete]
+verify_jwt = false
+
+[functions.voice-agent-options]
+verify_jwt = false
