@@ -27,8 +27,10 @@ interface CountryOption {
   name: string;
 }
 
+const FALLBACK_COUNTRY_CODES = ['US', 'CA', 'GB', 'AU', 'NZ', 'IE'];
+
 type IntlWithSupportedValuesOf = typeof Intl & {
-  supportedValuesOf?: (key: 'region') => string[];
+  supportedValuesOf?: (key: string) => string[];
 };
 
 interface SuggestionMenuProps<TSuggestion> {
@@ -46,16 +48,21 @@ function formatLocation(result: VoiceNumberSearchResult) {
 
 function buildCountryOptions(): CountryOption[] {
   const intlWithRegions = Intl as IntlWithSupportedValuesOf;
-
-  if (typeof intlWithRegions.supportedValuesOf !== 'function') {
-    return [{ code: 'US', name: 'United States' }];
-  }
-
+  const countryCodes =
+    typeof intlWithRegions.supportedValuesOf === 'function'
+      ? (() => {
+          try {
+            return intlWithRegions
+              .supportedValuesOf('region')
+              .filter((code: string) => /^[A-Z]{2}$/.test(code));
+          } catch {
+            return FALLBACK_COUNTRY_CODES;
+          }
+        })()
+      : FALLBACK_COUNTRY_CODES;
   const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
-  return intlWithRegions
-    .supportedValuesOf('region')
-    .filter((code: string) => /^[A-Z]{2}$/.test(code))
+  return countryCodes
     .map((code: string) => {
       const label = displayNames.of(code);
       return {
