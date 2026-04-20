@@ -1,7 +1,9 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { jsonResponse } from './cors.ts';
 
-export type EdgeClient = ReturnType<typeof createClient>;
+// Permissive type so existing edge function code (.insert/.update/.rpc) compiles
+// without a generated Database generic. Each query still returns typed rows.
+export type EdgeClient = SupabaseClient<any, any, any>;
 
 export interface AuthenticatedContext {
   serviceClient: EdgeClient;
