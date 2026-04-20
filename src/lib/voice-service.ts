@@ -45,6 +45,28 @@ export interface VoiceNumberSearchFilters {
   phone_number_type?: 'local' | 'toll_free' | '';
 }
 
+export interface VoiceNumberFilterCountryOption {
+  code: string;
+  name: string;
+}
+
+export interface VoiceNumberFilterStateOption {
+  code: string;
+  name: string;
+}
+
+export interface VoiceNumberFilterCityOption {
+  city: string;
+  stateCode: string;
+  stateName: string;
+}
+
+export interface VoiceNumberFilterOptionsResponse {
+  countries: VoiceNumberFilterCountryOption[];
+  states: VoiceNumberFilterStateOption[];
+  cities: VoiceNumberFilterCityOption[];
+}
+
 export interface VoiceNumberPurchaseInput {
   workspace_id: string;
   phone_number: string;
@@ -156,6 +178,13 @@ export async function listVoiceNumbers(session: Session, workspaceId: string, in
 
 export async function searchVoiceNumbers(session: Session, filters: VoiceNumberSearchFilters) {
   return invoke<{ results: VoiceNumberSearchResult[] }>('voice-number-search', session, filters);
+}
+
+export async function getVoiceNumberFilterOptions(
+  session: Session,
+  payload: Pick<VoiceNumberSearchFilters, 'workspace_id' | 'country_code'>,
+) {
+  return invoke<VoiceNumberFilterOptionsResponse>('voice-number-filter-options', session, payload);
 }
 
 export async function purchaseVoiceNumber(session: Session, payload: VoiceNumberPurchaseInput) {

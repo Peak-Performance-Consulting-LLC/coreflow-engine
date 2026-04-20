@@ -35,6 +35,22 @@ export interface TelnyxAvailablePhoneNumber {
   upfrontCost: string | null;
 }
 
+export interface TelnyxPhoneNumberFilterStateOption {
+  code: string;
+  name: string;
+}
+
+export interface TelnyxPhoneNumberFilterCityOption {
+  city: string;
+  stateCode: string;
+  stateName: string;
+}
+
+export interface TelnyxPhoneNumberFilterOptions {
+  states: TelnyxPhoneNumberFilterStateOption[];
+  cities: TelnyxPhoneNumberFilterCityOption[];
+}
+
 export interface PurchaseManagedPhoneNumberParams extends TelnyxNumbersClientConfig {
   phoneNumber: string;
   connectionId?: string | null;
@@ -87,6 +103,26 @@ const ACTIVE_ORDER_STATUSES = new Set(['success', 'completed', 'complete']);
 const FAILED_ORDER_STATUSES = new Set(['failed', 'failure', 'error', 'errored', 'canceled', 'cancelled']);
 const ACTIVE_PHONE_NUMBER_STATUSES = new Set(['active']);
 const FAILED_PHONE_NUMBER_STATUSES = new Set(['failed', 'error', 'deleted', 'released']);
+
+function doesResultCountryMatch(requestedCountryCode: string, resultCountryCode: string | null) {
+  if (!resultCountryCode) {
+    return false;
+  }
+
+  const normalizedRequested = requestedCountryCode.toUpperCase();
+  const normalizedResult = resultCountryCode.toUpperCase();
+
+  if (normalizedRequested === normalizedResult) {
+    return true;
+  }
+
+  // Some providers may send UK while request uses ISO GB.
+  if (normalizedRequested === 'GB' && normalizedResult === 'UK') {
+    return true;
+  }
+
+  return false;
+}
 
 export class TelnyxNumberProvisioningError extends Error {
   order: TelnyxManagedNumberOrder | null;
@@ -489,7 +525,74 @@ export async function searchAvailablePhoneNumbers(params: SearchAvailablePhoneNu
 
   return asArray(asRecord(response)?.data)
     .map(normalizeSearchResult)
+    .filter((item): item is TelnyxAvailablePhoneNumber => Boolean(item))
+    .filter((item) => doesResultCountryMatch(countryCode, item.countryCode));
+}
+
+export async function listAvailablePhoneNumberFilterOptions(
+  params: SearchAvailablePhoneNumbersParams & { sampleSize?: number | null },
+) {
+  const countryCode = getNullableString(params.countryCode)?.toUpperCase() ?? null;
+
+  if (!countryCode) {
+    throw new Error('country_code is required and must be a valid 2-letter ISO country code.');
+  }
+
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    throw new Error('country_code must be a valid 2-letter ISO country code.');
+  }
+
+  const sampleSize = Number.isFinite(params.sampleSize)
+    ? Math.min(Math.max(20, Number(params.sampleSize)), 250)
+    : 250;
+
+  const response = await telnyxRequest(params, 'GET', '/available_phone_numbers', {
+    query: {
+      'filter[country_code]': countryCode,
+      'filter[features]': 'voice',
+      'filter[limit]': sampleSize,
+    },
+  });
+
+  const numbers = asArray(asRecord(response)?.data)
+    .map(normalizeSearchResult)
     .filter((item): item is TelnyxAvailablePhoneNumber => Boolean(item));
+  const stateMap = new Map<string, TelnyxPhoneNumberFilterStateOption>();
+  const cityMap = new Map<string, TelnyxPhoneNumberFilterCityOption>();
+
+  for (const number of numbers) {
+    const rawState = getString(number.administrativeArea).toUpperCase();
+    const rawCity = getString(number.locality);
+    const stateCode = rawState || 'N/A';
+    const stateName = stateCode;
+
+    if (!stateMap.has(stateCode)) {
+      stateMap.set(stateCode, {
+        code: stateCode,
+        name: stateName,
+      });
+    }
+
+    if (rawCity) {
+      const cityKey = `${rawCity.toLowerCase()}::${stateCode}`;
+
+      if (!cityMap.has(cityKey)) {
+        cityMap.set(cityKey, {
+          city: rawCity,
+          stateCode,
+          stateName,
+        });
+      }
+    }
+  }
+
+  return {
+    states: [...stateMap.values()].sort((left, right) => left.code.localeCompare(right.code)),
+    cities: [...cityMap.values()].sort((left, right) => {
+      const stateCompare = left.stateCode.localeCompare(right.stateCode);
+      return stateCompare !== 0 ? stateCompare : left.city.localeCompare(right.city);
+    }),
+  } satisfies TelnyxPhoneNumberFilterOptions;
 }
 
 export async function findAvailableUsPhoneNumber(params: TelnyxNumbersClientConfig & { phoneNumber: string }) {

@@ -6,18 +6,20 @@ import { HomeNavbar } from '../components/home/HomeNavbar';
 import { HowItWorksSection } from '../components/home/HowItWorksSection';
 import { IndustryModesSection } from '../components/home/IndustryModesSection';
 import { TestimonialsSection } from '../components/home/TestimonialsSection';
-import { TrustedBySection } from '../components/home/TrustedBySection';
+// import { TrustpilotSection } from '../components/home/TrustpilotSection';
+// import { TrustedBySection } from '../components/home/TrustedBySection';
 
 export function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50/40 to-slate-100/60">
       <HomeNavbar />
       <HeroSection />
-      <TrustedBySection />
+      {/* <TrustedBySection /> */}
       <FeaturesSection />
       <IndustryModesSection />
       <HowItWorksSection />
       <TestimonialsSection />
+      {/* <TrustpilotSection /> */}
       <FinalCtaSection />
       <HomeFooter />
     </div>

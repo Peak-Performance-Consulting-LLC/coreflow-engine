@@ -23,7 +23,6 @@ export function VoiceNewNumberPage() {
     locality: '',
     administrative_area: '',
     npa: '',
-    limit: 10,
     phone_number_type: '' as 'local' | 'toll_free' | '',
   });
 
@@ -50,7 +49,7 @@ export function VoiceNewNumberPage() {
         locality: filters.locality || undefined,
         administrative_area: filters.administrative_area || undefined,
         npa: filters.npa || undefined,
-        limit: filters.limit,
+        limit: 20,
         phone_number_type: filters.phone_number_type || undefined,
       });
       setSearchResults(response.results);
@@ -61,6 +60,12 @@ export function VoiceNewNumberPage() {
     } finally {
       setSearching(false);
     }
+  }
+
+  function handleFilterChange(patch: Partial<typeof filters>) {
+    setFilters((current) => ({ ...current, ...patch }));
+    setHasSearched(false);
+    setSearchResults([]);
   }
 
   async function handlePurchase(label: string) {
@@ -126,11 +131,13 @@ export function VoiceNewNumberPage() {
         />
 
         <VoiceNumberSearchCard
+          session={session}
+          workspaceId={workspace.id}
           filters={filters}
           loading={searching}
           results={searchResults}
           hasSearched={hasSearched}
-          onFilterChange={(patch) => setFilters((current) => ({ ...current, ...patch }))}
+          onFilterChange={handleFilterChange}
           onSearch={handleSearch}
           onPurchaseClick={(result) => setSelectedResult(result)}
         />

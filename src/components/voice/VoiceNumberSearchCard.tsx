@@ -1,16 +1,20 @@
-import { ChevronDown, MapPin, Search, Star } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
+import { MapPin, Search, SlidersHorizontal, Star, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import {
-  getVoiceSearchSuggestions,
-  type AreaCodeSuggestion,
-  type CitySuggestion,
-  type StateSuggestion,
-} from '../../lib/voice-search-suggestions';
-import type { VoiceNumberSearchFilters, VoiceNumberSearchResult } from '../../lib/voice-service';
+  getVoiceNumberFilterOptions,
+  type VoiceNumberFilterCityOption,
+  type VoiceNumberFilterCountryOption,
+  type VoiceNumberFilterStateOption,
+  type VoiceNumberSearchFilters,
+  type VoiceNumberSearchResult,
+} from '../../lib/voice-service';
 
 interface VoiceNumberSearchCardProps {
+  session: Session;
+  workspaceId: string;
   filters: Omit<VoiceNumberSearchFilters, 'workspace_id'>;
   loading: boolean;
   results: VoiceNumberSearchResult[];
@@ -20,102 +24,16 @@ interface VoiceNumberSearchCardProps {
   onPurchaseClick: (result: VoiceNumberSearchResult) => void;
 }
 
-type SuggestionField = 'city' | 'state' | 'areaCode' | null;
-
-interface CountryOption {
-  code: string;
-  name: string;
-}
-
-const FALLBACK_COUNTRY_CODES = ['US', 'CA', 'GB', 'AU', 'NZ', 'IE'];
-
-type IntlWithSupportedValuesOf = typeof Intl & {
-  supportedValuesOf?: (key: string) => string[];
-};
-
-interface SuggestionMenuProps<TSuggestion> {
-  items: TSuggestion[];
-  emptyText: string;
-  getKey: (item: TSuggestion) => string;
-  getPrimary: (item: TSuggestion) => string;
-  getSecondary: (item: TSuggestion) => string;
-  onSelect: (item: TSuggestion) => void;
-}
-
 function formatLocation(result: VoiceNumberSearchResult) {
   return [result.locality, result.administrativeArea, result.countryCode].filter(Boolean).join(', ') || 'Unknown';
 }
 
-function buildCountryOptions(): CountryOption[] {
-  const intlWithRegions = Intl as IntlWithSupportedValuesOf;
-  const countryCodes =
-    typeof intlWithRegions.supportedValuesOf === 'function'
-      ? (() => {
-          try {
-            return intlWithRegions
-              .supportedValuesOf('region')
-              .filter((code: string) => /^[A-Z]{2}$/.test(code));
-          } catch {
-            return FALLBACK_COUNTRY_CODES;
-          }
-        })()
-      : FALLBACK_COUNTRY_CODES;
-  const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
-
-  return countryCodes
-    .map((code: string) => {
-      const label = displayNames.of(code);
-      return {
-        code,
-        name: label ?? code,
-      };
-    })
-    .sort((left: CountryOption, right: CountryOption) => left.name.localeCompare(right.name));
-}
-
-function SuggestionMenu<TSuggestion>({
-  items,
-  emptyText,
-  getKey,
-  getPrimary,
-  getSecondary,
-  onSelect,
-}: SuggestionMenuProps<TSuggestion>) {
-  if (items.length === 0) {
-    return (
-      <div className="absolute left-0 right-0 top-[calc(100%+0.6rem)] z-30 rounded-[24px] border border-slate-300 bg-slate-50 p-3 shadow-2xl backdrop-blur-xl">
-        <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
-          {emptyText}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="absolute left-0 right-0 top-[calc(100%+0.6rem)] z-30 overflow-hidden rounded-[24px] border border-accent-blue/25 bg-slate-50 shadow-2xl backdrop-blur-xl">
-      <div className="max-h-72 overflow-y-auto p-2">
-        {items.map((item) => (
-          <button
-            key={getKey(item)}
-            type="button"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              onSelect(item);
-            }}
-            className="flex w-full items-start justify-between gap-4 rounded-2xl px-4 py-3 text-left transition hover:bg-accent-blue/10"
-          >
-            <div>
-              <div className="font-semibold text-slate-900">{getPrimary(item)}</div>
-              <div className="mt-1 text-sm text-slate-600">{getSecondary(item)}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+const DEFAULT_COUNTRY_OPTIONS: VoiceNumberFilterCountryOption[] = [{ code: 'US', name: 'United States' }];
+const SEARCH_RESULTS_PAGE_SIZE = 12;
 
 export function VoiceNumberSearchCard({
+  session,
+  workspaceId,
   filters,
   loading,
   results,
@@ -124,93 +42,255 @@ export function VoiceNumberSearchCard({
   onSearch,
   onPurchaseClick,
 }: VoiceNumberSearchCardProps) {
-  const [stateSuggestions, setStateSuggestions] = useState<StateSuggestion[]>([]);
-  const [citySuggestions, setCitySuggestions] = useState<CitySuggestion[]>([]);
-  const [areaCodeSuggestions, setAreaCodeSuggestions] = useState<AreaCodeSuggestion[]>([]);
-  const [activeField, setActiveField] = useState<SuggestionField>(null);
-  const formRef = useRef<HTMLDivElement | null>(null);
-  const countryOptions = useMemo(() => buildCountryOptions(), []);
+  const [countryOptions, setCountryOptions] = useState<VoiceNumberFilterCountryOption[]>(DEFAULT_COUNTRY_OPTIONS);
+  const [stateOptions, setStateOptions] = useState<VoiceNumberFilterStateOption[]>([]);
+  const [cityOptions, setCityOptions] = useState<VoiceNumberFilterCityOption[]>([]);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+  const [detailResult, setDetailResult] = useState<VoiceNumberSearchResult | null>(null);
+  const onFilterChangeRef = useRef(onFilterChange);
+
+  useEffect(() => {
+    onFilterChangeRef.current = onFilterChange;
+  }, [onFilterChange]);
+
+  const normalizedState = (filters.administrative_area ?? '').trim().toUpperCase();
+  const normalizedLocality = (filters.locality ?? '').trim().toLowerCase();
 
   useEffect(() => {
     let active = true;
 
-    void getVoiceSearchSuggestions()
+    setFilterOptionsLoading(true);
+
+    void getVoiceNumberFilterOptions(session, {
+      workspace_id: workspaceId,
+      country_code: filters.country_code || 'US',
+    })
       .then((data) => {
         if (!active) {
           return;
         }
 
-        setStateSuggestions(data.states);
-        setCitySuggestions(data.cities);
-        setAreaCodeSuggestions(data.areaCodes);
+        setCountryOptions(data.countries.length > 0 ? data.countries : DEFAULT_COUNTRY_OPTIONS);
+        setStateOptions(data.states);
+        setCityOptions(data.cities);
+
+        const hasSelectedState = !normalizedState || data.states.some((state) => state.code === normalizedState);
+        const hasSelectedCity =
+          !normalizedLocality ||
+          data.cities.some((city) => {
+            const stateMatches = normalizedState ? city.stateCode === normalizedState : true;
+            return stateMatches && city.city.toLowerCase() === normalizedLocality;
+          });
+
+        const patch: Partial<Omit<VoiceNumberSearchFilters, 'workspace_id'>> = {};
+
+        if (!hasSelectedState && normalizedState) {
+          patch.administrative_area = '';
+        }
+
+        if (!hasSelectedCity && normalizedLocality) {
+          patch.locality = '';
+        }
+
+        if (Object.keys(patch).length > 0) {
+          onFilterChangeRef.current(patch);
+        }
       })
       .catch(() => {
         if (!active) {
           return;
         }
 
-        setStateSuggestions([]);
-        setCitySuggestions([]);
-        setAreaCodeSuggestions([]);
+        setStateOptions([]);
+        setCityOptions([]);
+      })
+      .finally(() => {
+        if (active) {
+          setFilterOptionsLoading(false);
+        }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [filters.country_code, session, workspaceId, normalizedLocality, normalizedState]);
+
+  const filteredCityOptions = useMemo(() => {
+    if (!normalizedState) {
+      return cityOptions;
+    }
+
+    return cityOptions.filter((city) => city.stateCode === normalizedState);
+  }, [cityOptions, normalizedState]);
+
+  const selectedCityValue = useMemo(() => {
+    if (!normalizedLocality) {
+      return '';
+    }
+
+    const selected = filteredCityOptions.find((city) => city.city.toLowerCase() === normalizedLocality);
+    return selected ? `${selected.city}::${selected.stateCode}` : '';
+  }, [filteredCityOptions, normalizedLocality]);
 
   useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (!formRef.current?.contains(event.target as Node)) {
-        setActiveField(null);
+    setCurrentPage(1);
+  }, [results, hasSearched]);
+
+  useEffect(() => {
+    setDetailResult(null);
+    setIsFilterDrawerOpen(false);
+  }, [results, hasSearched]);
+
+  useEffect(() => {
+    if (!detailResult && !isFilterDrawerOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      if (detailResult) {
+        setDetailResult(null);
+      } else {
+        setIsFilterDrawerOpen(false);
       }
     }
 
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, []);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [detailResult, isFilterDrawerOpen]);
 
-  const normalizedStateQuery = (filters.administrative_area ?? '').trim().toLowerCase();
-  const normalizedCityQuery = (filters.locality ?? '').trim().toLowerCase();
-  const normalizedAreaCodeQuery = (filters.npa ?? '').trim();
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(results.length / SEARCH_RESULTS_PAGE_SIZE)), [results.length]);
 
-  const filteredStateSuggestions = useMemo(() => {
-    if (!normalizedStateQuery) {
-      return stateSuggestions.slice(0, 12);
-    }
+  const paginatedResults = useMemo(() => {
+    const start = (currentPage - 1) * SEARCH_RESULTS_PAGE_SIZE;
+    return results.slice(start, start + SEARCH_RESULTS_PAGE_SIZE);
+  }, [currentPage, results]);
 
-    return stateSuggestions
-      .filter((state) =>
-        state.code.toLowerCase().includes(normalizedStateQuery) ||
-        state.name.toLowerCase().includes(normalizedStateQuery)
-      )
-      .slice(0, 12);
-  }, [normalizedStateQuery, stateSuggestions]);
+  function renderFilterFields() {
+    return (
+      <>
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium">Country</span>
+          <select
+            value={filters.country_code ?? 'US'}
+            onChange={(event) =>
+              onFilterChange({
+                country_code: event.target.value,
+                administrative_area: '',
+                locality: '',
+                npa: '',
+              })
+            }
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
+          >
+            {countryOptions.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.name} ({country.code})
+              </option>
+            ))}
+          </select>
+        </label>
 
-  const filteredCitySuggestions = useMemo(() => {
-    return citySuggestions
-      .filter((city) => {
-        const matchesState = normalizedStateQuery
-          ? city.stateCode.toLowerCase() === normalizedStateQuery || city.stateName.toLowerCase().includes(normalizedStateQuery)
-          : true;
-        const matchesCity = normalizedCityQuery ? city.city.toLowerCase().includes(normalizedCityQuery) : true;
-        return matchesState && matchesCity;
-      })
-      .slice(0, 12);
-  }, [citySuggestions, normalizedCityQuery, normalizedStateQuery]);
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium">State / Region</span>
+          <select
+            value={filters.administrative_area ?? ''}
+            onChange={(event) => {
+              const nextState = event.target.value;
+              const currentCity = (filters.locality ?? '').trim().toLowerCase();
+              const cityStillValid =
+                !currentCity ||
+                filteredCityOptions.some((city) => city.stateCode === nextState && city.city.toLowerCase() === currentCity);
 
-  const filteredAreaCodeSuggestions = useMemo(() => {
-    return areaCodeSuggestions
-      .filter((entry) => {
-        const matchesAreaCode = normalizedAreaCodeQuery ? entry.areaCode.startsWith(normalizedAreaCodeQuery) : true;
-        const matchesState = normalizedStateQuery
-          ? entry.stateCode.toLowerCase() === normalizedStateQuery || entry.stateName.toLowerCase().includes(normalizedStateQuery)
-          : true;
-        const matchesCity = normalizedCityQuery ? entry.city.toLowerCase().includes(normalizedCityQuery) : true;
-        return matchesAreaCode && matchesState && matchesCity;
-      })
-      .slice(0, 12);
-  }, [areaCodeSuggestions, normalizedAreaCodeQuery, normalizedCityQuery, normalizedStateQuery]);
+              onFilterChange({
+                administrative_area: nextState,
+                locality: cityStillValid ? filters.locality : '',
+              });
+            }}
+            disabled={filterOptionsLoading}
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 disabled:bg-slate-100"
+          >
+            <option value="">Any state</option>
+            {stateOptions.map((state) => (
+              <option key={state.code} value={state.code}>
+                {state.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium">City</span>
+          <select
+            value={selectedCityValue}
+            onChange={(event) => {
+              const value = event.target.value;
+
+              if (!value) {
+                onFilterChange({ locality: '' });
+                return;
+              }
+
+              const [city, stateCode] = value.split('::');
+              onFilterChange({
+                locality: city,
+                administrative_area: stateCode || filters.administrative_area,
+              });
+            }}
+            disabled={filterOptionsLoading}
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 disabled:bg-slate-100"
+          >
+            <option value="">Any city</option>
+            {filteredCityOptions.map((city) => (
+              <option key={`${city.city}-${city.stateCode}`} value={`${city.city}::${city.stateCode}`}>
+                {city.city} ({city.stateCode})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium">Area code / NDC</span>
+          <input
+            value={filters.npa ?? ''}
+            onChange={(event) => onFilterChange({ npa: event.target.value.replace(/\D/g, '').slice(0, 6) })}
+            placeholder="312 or 20"
+            autoComplete="off"
+            inputMode="numeric"
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-500"
+          />
+        </label>
+
+        <label className="flex flex-col gap-2 text-sm text-slate-700">
+          <span className="font-medium">Number type</span>
+          <select
+            value={filters.phone_number_type ?? ''}
+            onChange={(event) =>
+              onFilterChange({
+                phone_number_type: event.target.value as 'local' | 'toll_free' | '',
+              })
+            }
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
+          >
+            <option value="">Any</option>
+            <option value="local">Local</option>
+            <option value="toll_free">Toll-free</option>
+          </select>
+        </label>
+      </>
+    );
+  }
 
   return (
     <Card className="p-6">
@@ -224,211 +304,175 @@ export function VoiceNumberSearchCard({
           </p>
         </div>
 
-        <div ref={formRef} className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <label className="flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">Country</span>
-            <select
-              value={filters.country_code ?? ''}
-              onChange={(event) => onFilterChange({ country_code: event.target.value })}
-              className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
-            >
-              {countryOptions.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name} ({country.code})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="relative flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">City</span>
-            <div
-              className={`relative flex h-12 items-center rounded-2xl border bg-white px-4 transition ${
-                activeField === 'city'
-                  ? 'border-accent-blue/45 bg-white shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
-                  : 'border-slate-300'
-              }`}
-            >
-              <input
-                value={filters.locality ?? ''}
-                onFocus={() => setActiveField('city')}
-                onChange={(event) => {
-                  setActiveField('city');
-                  onFilterChange({ locality: event.target.value });
-                }}
-                placeholder="Chicago"
-                autoComplete="off"
-                className="h-full w-full bg-transparent pr-10 text-sm text-slate-900 placeholder:text-slate-500"
-              />
-              <ChevronDown className="pointer-events-none absolute right-4 h-4 w-4 text-slate-500" />
-            </div>
-            {activeField === 'city' ? (
-              <SuggestionMenu
-                items={filteredCitySuggestions}
-                emptyText="No matching cities found."
-                getKey={(city) => `${city.city}-${city.stateCode}`}
-                getPrimary={(city) => city.city}
-                getSecondary={(city) => `${city.stateName} (${city.stateCode})`}
-                onSelect={(city) => {
-                  onFilterChange({
-                    locality: city.city,
-                    administrative_area: city.stateCode,
-                  });
-                  setActiveField(null);
-                }}
-              />
-            ) : null}
-          </label>
-
-          <label className="relative flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">State / Region</span>
-            <div
-              className={`relative flex h-12 items-center rounded-2xl border bg-white px-4 transition ${
-                activeField === 'state'
-                  ? 'border-accent-blue/45 bg-white shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
-                  : 'border-slate-300'
-              }`}
-            >
-              <input
-                value={filters.administrative_area ?? ''}
-                onFocus={() => setActiveField('state')}
-                onChange={(event) => {
-                  setActiveField('state');
-                  onFilterChange({ administrative_area: event.target.value.toUpperCase() });
-                }}
-                placeholder="IL"
-                autoComplete="off"
-                className="h-full w-full bg-transparent pr-10 text-sm text-slate-900 placeholder:text-slate-500"
-              />
-              <ChevronDown className="pointer-events-none absolute right-4 h-4 w-4 text-slate-500" />
-            </div>
-            {activeField === 'state' ? (
-              <SuggestionMenu
-                items={filteredStateSuggestions}
-                emptyText="No matching states found."
-                getKey={(state) => state.code}
-                getPrimary={(state) => state.code}
-                getSecondary={(state) => state.name}
-                onSelect={(state) => {
-                  onFilterChange({ administrative_area: state.code });
-                  setActiveField(null);
-                }}
-              />
-            ) : null}
-          </label>
-
-          <label className="relative flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">Area code / NDC</span>
-            <div
-              className={`relative flex h-12 items-center rounded-2xl border bg-white px-4 transition ${
-                activeField === 'areaCode'
-                  ? 'border-accent-blue/45 bg-white shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
-                  : 'border-slate-300'
-              }`}
-            >
-              <input
-                value={filters.npa ?? ''}
-                onFocus={() => setActiveField('areaCode')}
-                onChange={(event) => {
-                  setActiveField('areaCode');
-                  onFilterChange({ npa: event.target.value.replace(/\D/g, '').slice(0, 6) });
-                }}
-                placeholder="312 or 20"
-                autoComplete="off"
-                className="h-full w-full bg-transparent pr-10 text-sm text-slate-900 placeholder:text-slate-500"
-              />
-              <ChevronDown className="pointer-events-none absolute right-4 h-4 w-4 text-slate-500" />
-            </div>
-            {activeField === 'areaCode' ? (
-              <SuggestionMenu
-                items={filteredAreaCodeSuggestions}
-                emptyText="No matching area codes found."
-                getKey={(entry) => entry.areaCode}
-                getPrimary={(entry) => entry.areaCode}
-                getSecondary={(entry) => `${entry.city}, ${entry.stateCode}`}
-                onSelect={(entry) => {
-                  onFilterChange({
-                    npa: entry.areaCode,
-                    locality: entry.city,
-                    administrative_area: entry.stateCode,
-                  });
-                  setActiveField(null);
-                }}
-              />
-            ) : null}
-          </label>
-
-          <label className="flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">Number type</span>
-            <select
-              value={filters.phone_number_type ?? ''}
-              onChange={(event) =>
-                onFilterChange({
-                  phone_number_type: event.target.value as 'local' | 'toll_free' | '',
-                })
-              }
-              className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
-            >
-              <option value="">Any</option>
-              <option value="local">Local</option>
-              <option value="toll_free">Toll-free</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-2 text-sm text-slate-700">
-            <span className="font-medium">Results</span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={filters.limit ?? 10}
-              onChange={(event) => onFilterChange({ limit: Number(event.target.value) || 10 })}
-              className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900"
-            />
-          </label>
+        <div className="flex items-center gap-2 md:hidden">
+          <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsFilterDrawerOpen(true)}>
+            <SlidersHorizontal className="h-4 w-4" />
+            Filters
+          </Button>
+          <Button type="button" className="flex-1" onClick={() => void onSearch()} loading={loading}>
+            <Search className="h-4 w-4" />
+            Search
+          </Button>
         </div>
 
-        <div className="flex justify-end">
-          <Button type="button" onClick={() => void onSearch()} loading={loading}>
-            <Search className="h-4 w-4" />
-            Search Numbers
-          </Button>
+        <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-6">
+          {renderFilterFields()}
+          <div className="flex items-end xl:justify-end">
+            <Button type="button" onClick={() => void onSearch()} loading={loading} className="w-full xl:w-auto">
+              <Search className="h-4 w-4" />
+              Search Numbers
+            </Button>
+          </div>
         </div>
 
         {hasSearched ? (
           results.length > 0 ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {results.map((result) => (
-                <div key={result.phoneNumber} className="rounded-[28px] border border-slate-300 bg-white p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="font-display text-2xl text-slate-900">{result.phoneNumber}</div>
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.22em] text-slate-500">
-                        <span>{result.phoneNumberType ?? 'standard'}</span>
-                        {result.quickship ? (
-                          <span className="inline-flex items-center gap-1 text-accent-blue">
-                            <Star className="h-3.5 w-3.5" />
-                            Quickship
-                          </span>
-                        ) : null}
-                      </div>
+            <div className="space-y-5">
+              <div className="space-y-3 md:hidden">
+                {paginatedResults.map((result) => (
+                  <div key={result.phoneNumber} className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setDetailResult(result)}
+                        className="text-left font-semibold text-slate-900 transition hover:text-accent-blue"
+                      >
+                        {result.phoneNumber}
+                      </button>
+                      <Button type="button" size="sm" onClick={() => onPurchaseClick(result)}>
+                        Buy
+                      </Button>
                     </div>
-                    <Button type="button" size="sm" onClick={() => onPurchaseClick(result)}>
-                      Buy Number
-                    </Button>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-accent-blue" />
+                    <div className="mt-2 flex items-center gap-1.5 text-sm text-slate-600">
+                      <MapPin className="h-3.5 w-3.5 text-accent-blue" />
                       {formatLocation(result)}
                     </div>
-                    <div>Monthly: {result.monthlyCost ?? 'Unknown'}</div>
-                    <div>Upfront: {result.upfrontCost ?? 'Unknown'}</div>
-                    <div>Features: {result.features.length > 0 ? result.features.join(', ') : 'Not listed'}</div>
                   </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-slate-300 bg-white md:block">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[980px] w-full text-left text-sm text-slate-700">
+                    <thead className="border-b border-slate-300 bg-slate-100 text-xs uppercase tracking-[0.16em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Number</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium">Location</th>
+                        <th className="px-4 py-3 font-medium">Monthly</th>
+                        <th className="px-4 py-3 font-medium">Upfront</th>
+                        <th className="px-4 py-3 font-medium">Features</th>
+                        <th className="px-4 py-3 text-right font-medium">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedResults.map((result) => (
+                        <tr key={result.phoneNumber} className="border-b border-slate-200 last:border-b-0">
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setDetailResult(result)}
+                              className="font-semibold text-slate-900 transition hover:text-accent-blue"
+                            >
+                              {result.phoneNumber}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span>{result.phoneNumberType ?? 'standard'}</span>
+                              {result.quickship ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-medium text-accent-blue">
+                                  <Star className="h-3 w-3" />
+                                  Quickship
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="h-3.5 w-3.5 text-accent-blue" />
+                              {formatLocation(result)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{result.monthlyCost ?? 'Unknown'}</td>
+                          <td className="px-4 py-3">{result.upfrontCost ?? 'Unknown'}</td>
+                          <td className="max-w-[300px] px-4 py-3">
+                            <div className="truncate">
+                              {result.features.length > 0 ? result.features.join(', ') : 'Not listed'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button type="button" size="sm" onClick={() => onPurchaseClick(result)}>
+                              Buy Number
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              </div>
+
+              {totalPages > 1 ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 md:hidden">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <div className="text-sm text-slate-600">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+
+                  <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setCurrentPage(page)}
+                        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border text-sm transition ${
+                          currentPage === page
+                            ? 'border-accent-blue bg-accent-blue text-white'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-[28px] border border-slate-300 bg-white px-5 py-4 text-sm text-slate-600">
@@ -437,6 +481,128 @@ export function VoiceNumberSearchCard({
           )
         ) : null}
       </div>
+
+      {isFilterDrawerOpen ? (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close filters"
+            onClick={() => setIsFilterDrawerOpen(false)}
+            className="absolute inset-0 bg-transparent"
+          />
+
+          <aside className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col border-l border-slate-300 bg-slate-50 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-300 px-4 py-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.22em] text-accent-blue">Filters</div>
+                <div className="mt-1 font-medium text-slate-900">Refine number search</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFilterDrawerOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">{renderFilterFields()}</div>
+
+            <div className="flex gap-3 border-t border-slate-300 px-4 py-4">
+              <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsFilterDrawerOpen(false)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                loading={loading}
+                onClick={() => {
+                  void onSearch();
+                  setIsFilterDrawerOpen(false);
+                }}
+              >
+                <Search className="h-4 w-4" />
+                Search
+              </Button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
+      {detailResult ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <button
+            type="button"
+            aria-label="Close number details"
+            onClick={() => setDetailResult(null)}
+            className="absolute inset-0 bg-transparent"
+          />
+
+          <aside
+            role="dialog"
+            aria-modal="true"
+            className="relative z-10 w-full max-w-2xl rounded-2xl border border-slate-300 bg-slate-50 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-300 px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.22em] text-accent-blue">Number details</div>
+                <h3 className="mt-2 truncate font-display text-2xl text-slate-900">{detailResult.phoneNumber}</h3>
+                <p className="mt-1 text-sm text-slate-600">{formatLocation(detailResult)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailResult(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-300 bg-slate-50 text-slate-700 transition hover:text-slate-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5 sm:px-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Type</div>
+                  <div className="mt-1 text-sm text-slate-900">{detailResult.phoneNumberType ?? 'standard'}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Quickship</div>
+                  <div className="mt-1 text-sm text-slate-900">{detailResult.quickship ? 'Yes' : 'No'}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Monthly cost</div>
+                  <div className="mt-1 text-sm text-slate-900">{detailResult.monthlyCost ?? 'Unknown'}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Upfront cost</div>
+                  <div className="mt-1 text-sm text-slate-900">{detailResult.upfrontCost ?? 'Unknown'}</div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Features</div>
+                <div className="mt-2 text-sm text-slate-900">
+                  {detailResult.features.length > 0 ? detailResult.features.join(', ') : 'Not listed'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-300 px-5 py-4 sm:px-6">
+              <Button type="button" variant="ghost" onClick={() => setDetailResult(null)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  onPurchaseClick(detailResult);
+                  setDetailResult(null);
+                }}
+              >
+                Buy Number
+              </Button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
     </Card>
   );
 }

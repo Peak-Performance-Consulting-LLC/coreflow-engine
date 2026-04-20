@@ -43,6 +43,9 @@ verify_jwt = false
 [functions.voice-number-search]
 verify_jwt = false
 
+[functions.voice-number-filter-options]
+verify_jwt = false
+
 [functions.voice-number-purchase]
 verify_jwt = false
 
@@ -79,6 +82,9 @@ verify_jwt = false
 [functions.voice-call-get]
 verify_jwt = false
 
+[functions.voice-call-create-task]
+verify_jwt = false
+
 [functions.voice-call-retry-lead-create]
 verify_jwt = false
 
@@ -93,4 +99,25 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.voice-agent-options]
+verify_jwt = false
+
+[functions.account-settings-get]
+verify_jwt = false
+
+[functions.account-settings-sender-add]
+verify_jwt = false
+
+[functions.account-settings-update]
+verify_jwt = false
+
+[functions.email-oauth-start]
+verify_jwt = false
+
+[functions.email-oauth-callback]
+verify_jwt = false
+
+[functions.email-followup-dispatch]
+verify_jwt = false
+
+[functions.email-enroll-lead]
 verify_jwt = false

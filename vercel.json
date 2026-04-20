@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/email-followup-dispatch",
+      "schedule": "* * * * *"
+    }
+  ],
   "routes": [
     {
       "handle": "filesystem"

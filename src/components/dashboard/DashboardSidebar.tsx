@@ -3,9 +3,11 @@ import {
   Bot,
   LayoutGrid,
   ListChecks,
+  Mail,
   PhoneCall,
   PlusCircle,
   Rows3,
+  UserCircle2,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -29,6 +31,8 @@ export function DashboardSidebar({ workspace }: { workspace: WorkspaceSummary })
     { label: 'Overview', icon: LayoutGrid, to: `/dashboard/${workspace.crmType}`, end: true },
     { label: 'Records', icon: Rows3, to: '/records' },
     { label: 'Imports', icon: ArrowDownToLine, to: '/imports' },
+    { label: 'Email', icon: Mail, to: '/email', end: true },
+    { label: 'Account', icon: UserCircle2, to: '/account', end: true },
   ];
   const ownerVoiceItems: SidebarNavItem[] = [
     { label: 'Provisioned numbers', icon: ListChecks, to: '/voice/numbers', end: true },

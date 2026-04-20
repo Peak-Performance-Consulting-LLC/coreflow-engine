@@ -21,6 +21,7 @@ import {
   updateRecord,
 } from '../lib/crm-service';
 import type { CrmWorkspaceConfig, RecordDetailResponse, RecordSaveInput } from '../lib/crm-types';
+import { enrollLead } from '../lib/email-service';
 
 function findStageName(config: CrmWorkspaceConfig, stageId: string | null) {
   for (const pipeline of config.pipelines) {
@@ -54,6 +55,7 @@ export function RecordDetailPage() {
   const [detailRefreshing, setDetailRefreshing] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState(detail?.record.stage_id ?? '');
   const [movingStage, setMovingStage] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
 
   const visibleDetail = detail?.record.id === recordId ? detail : null;
 
@@ -182,6 +184,20 @@ export function RecordDetailPage() {
     toast.success('Task created.');
   }
 
+  async function handleEnrollEmail() {
+    if (!visibleDetail) return;
+    setEnrolling(true);
+    try {
+      const result = await enrollLead(visibleDetail.record.id);
+      toast.success(result.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to enroll lead.';
+      toast.error(message);
+    } finally {
+      setEnrolling(false);
+    }
+  }
+
   if (!session || !workspace || !workspaceId) {
     return <FullPageLoader label="Loading record details..." />;
   }
@@ -268,6 +284,39 @@ export function RecordDetailPage() {
                     Move stage
                   </Button>
                 </div>
+              </div>
+            </Card>
+
+            {/* ── Email Sequence Enrollment ── */}
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-center justify-between gap-4 px-6 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">Email Follow-up Sequence</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Automatically send a series of follow-up emails to this lead.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  loading={enrolling}
+                  onClick={() => void handleEnrollEmail()}
+                >
+                  {enrolling ? 'Enrolling…' : 'Enroll in Sequence'}
+                </Button>
+              </div>
+              <div className="border-t border-slate-100 bg-slate-50 px-6 py-2.5">
+                <p className="text-[11px] text-slate-400">
+                  Requires email automation enabled and a default sender connected in{' '}
+                  <a href="/email" className="text-violet-500 underline hover:text-violet-700">Email Settings</a>.
+                </p>
               </div>
             </Card>
 

@@ -1,5 +1,6 @@
 import type { EdgeClient } from './server.ts';
 import { getString, listWorkspaceAssignees } from './server.ts';
+import { enrollRecordEmailFollowupIfEligible } from './email-automation.ts';
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
@@ -992,6 +993,26 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
     await writeActivity(serviceClient, workspaceId, record.id, 'assignment_changed', userId, {
       assignee_user_id: record.assignee_user_id,
     });
+  }
+
+  // Email follow-up enrollment should never block lead creation success.
+  if (record.record_type === 'lead' && record.email) {
+    try {
+      await enrollRecordEmailFollowupIfEligible({
+        db: serviceClient,
+        workspaceId,
+        recordId: record.id,
+        actorUserId: userId,
+        recordEmail: record.email,
+        recordFullName: record.full_name,
+      });
+    } catch (error) {
+      console.warn('[records] email follow-up enrollment skipped after error', {
+        workspaceId,
+        recordId: record.id,
+        message: error instanceof Error ? error.message : 'Unknown error.',
+      });
+    }
   }
 
   return getRecordDetails(serviceClient, workspaceId, record.id);
