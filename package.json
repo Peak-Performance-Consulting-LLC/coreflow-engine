@@ -20,7 +20,7 @@
     "vite": "^8.0.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.101.0",
+    "@supabase/supabase-js": "^2.103.3",
     "areacodes": "^0.2.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
