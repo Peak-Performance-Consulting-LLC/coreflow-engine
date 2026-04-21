@@ -238,6 +238,38 @@ interface ScheduledEmail {
   leads: string[]; scheduledAt: string; timezone: string; status: ScheduleStatus; createdAt: string;
 }
 const TIMEZONES = ['UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Phoenix','Europe/London','Europe/Berlin','Europe/Paris','Asia/Kolkata','Asia/Dubai','Australia/Sydney'];
+const CUSTOM_TEMPLATE_STORAGE_PREFIX = 'coreflow-email-custom-templates';
+
+function loadStoredCustomTemplates(workspaceId: string): EmailTemplate[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(`${CUSTOM_TEMPLATE_STORAGE_PREFIX}:${workspaceId}`);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+      .filter(item =>
+        typeof item.id === 'string' &&
+        typeof item.name === 'string' &&
+        typeof item.category === 'string' &&
+        typeof item.subject === 'string' &&
+        typeof item.body === 'string'
+      )
+      .map(item => ({
+        id: item.id as string,
+        name: item.name as string,
+        category: item.category as string,
+        subject: item.subject as string,
+        body: item.body as string,
+        tags: Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string') : [],
+        isPremade: false,
+        isHtml: Boolean(item.isHtml),
+      }));
+  } catch {
+    return [];
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════════
    EmailPage
@@ -251,14 +283,16 @@ export function EmailPage() {
     toast.success('Signed out successfully.');
     navigate('/signin', { replace: true, state: { existingUser: true } });
   }
-  return <EmailPageInner workspace={workspace} onSignOut={handleSignOut} navigate={navigate} />;
+  return <EmailPageInner workspace={workspace} onSignOut={handleSignOut} />;
 }
 
-function EmailPageInner({ workspace, onSignOut, navigate }: { workspace: WorkspaceSummary; onSignOut: () => Promise<void>; navigate: ReturnType<typeof useNavigate> }) {
+function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary; onSignOut: () => Promise<void> }) {
   const [activeTab, setActiveTab] = useState<Tab>('config');
   const [data, setData] = useState<AccountSettingsGetResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
+  const [templatesHydrated, setTemplatesHydrated] = useState(false);
   const reload = useCallback(async () => {
     setLoading(true); setError(null);
     try { setData(await fetchAccountSettings()); }
@@ -266,6 +300,17 @@ function EmailPageInner({ workspace, onSignOut, navigate }: { workspace: Workspa
     finally { setLoading(false); }
   }, []);
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    setTemplatesHydrated(false);
+    setCustomTemplates(loadStoredCustomTemplates(workspace.id));
+    setTemplatesHydrated(true);
+  }, [workspace.id]);
+  useEffect(() => {
+    if (!templatesHydrated || typeof window === 'undefined') return;
+    window.localStorage.setItem(`${CUSTOM_TEMPLATE_STORAGE_PREFIX}:${workspace.id}`, JSON.stringify(customTemplates));
+  }, [customTemplates, templatesHydrated, workspace.id]);
+
+  const allTemplates = [...PREMADE_TEMPLATES, ...customTemplates];
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
@@ -304,8 +349,8 @@ function EmailPageInner({ workspace, onSignOut, navigate }: { workspace: Workspa
       {loading && !data ? <LoadingSkeleton /> : (
         <>
           {activeTab === 'config' && <ConfigTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
-          {activeTab === 'templates' && <TemplatesTab />}
-          {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
+          {activeTab === 'templates' && <TemplatesTab customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
+          {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} />}
         </>
       )}
     </WorkspaceLayout>
@@ -479,12 +524,12 @@ function SmtpDrawer({ provider: providerId, workspaceId, onClose, onSuccess }: {
    TAB 2 — Email Templates
 ══════════════════════════════════════════════════════════════════════════ */
 type TemplateMode = 'browse' | 'create' | 'edit';
+type SetCustomTemplates = (value: EmailTemplate[] | ((prev: EmailTemplate[]) => EmailTemplate[])) => void;
 
-function TemplatesTab() {
+function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates: EmailTemplate[]; setCustomTemplates: SetCustomTemplates }) {
   const [mode, setMode] = useState<TemplateMode>('browse');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [previewingTemplate, setPreviewingTemplate] = useState<EmailTemplate | null>(null);
   const [designerBlocks, setDesignerBlocks] = useState<EmailBlock[]>([]);
@@ -608,7 +653,7 @@ function TemplatesTab() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filtered.filter(t => !t.isPremade).map(t => (
-              <TemplateCard key={t.id} template={t} onUse={() => openEdit(t)} onPreview={() => setPreviewingTemplate(t)} onEdit={() => openEdit(t)} onDelete={() => handleDeleteTemplate(t.id)} useLabel="Open Designer" />
+              <TemplateCard key={t.id} template={t} onUse={() => openEdit(t)} onPreview={() => setPreviewingTemplate(t)} onDelete={() => handleDeleteTemplate(t.id)} useLabel="Open Designer" />
             ))}
           </div>
         )}
@@ -625,7 +670,7 @@ function TemplatesTab() {
   );
 }
 
-function TemplateCard({ template, onUse, onPreview, onEdit, onDelete, useLabel = 'Use Template' }: { template: EmailTemplate; onUse: () => void; onPreview: () => void; onEdit?: () => void; onDelete?: () => void; useLabel?: string }) {
+function TemplateCard({ template, onUse, onPreview, onDelete, useLabel = 'Use Template' }: { template: EmailTemplate; onUse: () => void; onPreview: () => void; onDelete?: () => void; useLabel?: string }) {
   const catColors: Record<string, string> = { Welcome: 'bg-blue-50 text-blue-600', 'Follow-up': 'bg-violet-50 text-violet-600', Promotional: 'bg-amber-50 text-amber-600', 'Re-engagement': 'bg-rose-50 text-rose-600', Custom: 'bg-slate-100 text-slate-600' };
   return (
     <div className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-violet-200 hover:shadow-md">
@@ -1232,11 +1277,20 @@ const SCHEDULING_SUBTABS: { id: SchedulingSubTab; label: string; icon: typeof Ma
   { id: 'manual',     label: 'Send Now',        icon: Send,     desc: 'Send an email immediately' },
 ];
 
-function SchedulingTab({ data, workspaceId, onRefresh }: { data: AccountSettingsGetResponse | null; workspaceId: string; onRefresh: () => void }) {
+function SchedulingTab({
+  data,
+  workspaceId,
+  onRefresh,
+  allTemplates,
+}: {
+  data: AccountSettingsGetResponse | null;
+  workspaceId: string;
+  onRefresh: () => void;
+  allTemplates: EmailTemplate[];
+}) {
   const [subTab, setSubTab] = useState<SchedulingSubTab>('schedule');
   const steps = data?.sequence_steps ?? [];
   const automation = data?.automation;
-  const allTemplates = [...PREMADE_TEMPLATES];
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-2">
@@ -1253,7 +1307,7 @@ function SchedulingTab({ data, workspaceId, onRefresh }: { data: AccountSettings
         })}
       </div>
       {subTab === 'schedule'   && <ScheduleEmailPanel allTemplates={allTemplates} />}
-      {subTab === 'automation' && <AutomationPanel data={data} workspaceId={workspaceId} steps={steps} automation={automation} onRefresh={onRefresh} />}
+      {subTab === 'automation' && <AutomationPanel workspaceId={workspaceId} steps={steps} automation={automation} onRefresh={onRefresh} />}
       {subTab === 'manual'     && <ManualSendPanel allTemplates={allTemplates} />}
     </div>
   );
@@ -1314,13 +1368,37 @@ function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] })
         {step === 1 && (
           <div className="space-y-3">
             <div><p className="text-base font-bold text-slate-800">Select Template</p><p className="text-sm text-slate-500 mt-0.5">Which email template do you want to send?</p></div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {allTemplates.map(t => (
-                <button key={t.id} onClick={() => setSelectedTemplate(t)} className={cls('flex items-start gap-3 rounded-xl border p-3 text-left transition', selectedTemplate?.id === t.id ? 'border-violet-400 bg-violet-50 ring-2 ring-violet-200' : 'border-slate-200 hover:border-violet-200')}>
-                  <div className={cls('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2', selectedTemplate?.id === t.id ? 'border-violet-600 bg-violet-600' : 'border-slate-300')}>{selectedTemplate?.id === t.id && <div className="h-1.5 w-1.5 rounded-full bg-white" />}</div>
-                  <div><p className="text-xs font-semibold text-slate-800">{t.name}</p><p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{t.subject}</p></div>
-                </button>
-              ))}
+            <div className="max-w-xl">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600">Template *</label>
+              <select
+                value={selectedTemplate?.id ?? ''}
+                onChange={e => {
+                  const selected = allTemplates.find(template => template.id === e.target.value) ?? null;
+                  setSelectedTemplate(selected);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none"
+              >
+                <option value="">Select a template</option>
+                {allTemplates.map(template => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} ({template.category})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedTemplate && (
+              <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">{selectedTemplate.name}</p>
+                <p className="mt-1 text-sm text-slate-700">{selectedTemplate.subject}</p>
+              </div>
+            )}
+            {allTemplates.length === 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                No templates available yet. Create one in Email Templates first.
+              </div>
+            )}
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+              Use the dropdown to pick one template before scheduling recipients.
             </div>
           </div>
         )}
@@ -1387,7 +1465,7 @@ function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] })
 }
 
 /* ─── Automation Panel ────────────────────────────────────────────────── */
-function AutomationPanel({ data, workspaceId, steps, automation, onRefresh }: { data: AccountSettingsGetResponse | null; workspaceId: string; steps: EmailSequenceStep[]; automation: AccountSettingsGetResponse['automation'] | undefined; onRefresh: () => void }) {
+function AutomationPanel({ workspaceId, steps, automation, onRefresh }: { workspaceId: string; steps: EmailSequenceStep[]; automation: AccountSettingsGetResponse['automation'] | undefined; onRefresh: () => void }) {
   const [isEnabled, setIsEnabled] = useState(automation?.is_enabled ?? false);
   const [timezone, setTimezone] = useState(automation?.timezone ?? 'UTC');
   const [stopOnReply, setStopOnReply] = useState(automation?.stop_on_reply ?? false);
@@ -1509,15 +1587,24 @@ function ManualSendPanel({ allTemplates }: { allTemplates: EmailTemplate[] }) {
           <p className="text-sm font-medium text-slate-700">Start from a template</p>
         </div>
         {useTemplate && (
-          <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Choose Template</label>
-            <div className="grid sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {allTemplates.map(t => (
-                <button key={t.id} onClick={() => handleSelectTemplate(selectedTemplate?.id === t.id ? null : t)} className={cls('flex items-start gap-2 rounded-xl border p-2.5 text-left transition', selectedTemplate?.id === t.id ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-200' : 'border-slate-200 hover:border-violet-200')}>
-                  <div className={cls('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2', selectedTemplate?.id === t.id ? 'border-violet-600 bg-violet-600' : 'border-slate-300')}>{selectedTemplate?.id === t.id && <div className="h-1.5 w-1.5 rounded-full bg-white" />}</div>
-                  <div><p className="text-xs font-semibold text-slate-800">{t.name}</p><p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{t.subject}</p></div>
-                </button>
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-600">Choose Template</label>
+            <select
+              value={selectedTemplate?.id ?? ''}
+              onChange={e => {
+                const selected = allTemplates.find(template => template.id === e.target.value) ?? null;
+                handleSelectTemplate(selected);
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none"
+            >
+              <option value="">Select a template</option>
+              {allTemplates.map(template => (
+                <option key={template.id} value={template.id}>
+                  {template.name} ({template.category})
+                </option>
               ))}
-            </div>
+            </select>
+            {selectedTemplate && <p className="text-xs text-slate-500">Subject: {selectedTemplate.subject}</p>}
           </div>
         )}
         <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Subject *</label><input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="What is this email about?" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none" /></div>
