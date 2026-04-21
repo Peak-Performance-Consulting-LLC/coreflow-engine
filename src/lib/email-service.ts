@@ -266,3 +266,181 @@ export async function deleteSequenceStep(stepId: string): Promise<void> {
   const { error } = await sb.from('workspace_email_sequence_steps').delete().eq('id', stepId);
   if (error) throw new Error(error.message);
 }
+
+export type ManualSendStatus = 'queued' | 'sending' | 'completed' | 'failed' | 'cancelled';
+
+export interface ScheduledManualEmail {
+  id: string;
+  workspace_id: string;
+  template_id?: string | null;
+  sender_id?: string | null;
+  subject_template: string;
+  body_html_template?: string | null;
+  body_plain_template?: string | null;
+  layout_json?: unknown;
+  theme_overrides?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  status: ManualSendStatus;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  suppressed_count: number;
+  scheduled_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduledManualEmailRecipient {
+  id: string;
+  workspace_id: string;
+  manual_send_id: string;
+  record_id?: string | null;
+  recipient_email: string;
+  recipient_name?: string | null;
+  status: 'pending' | 'sent' | 'failed' | 'unsubscribed';
+  suppression_reason?: string | null;
+  provider_message_id?: string | null;
+  error_text?: string | null;
+  sent_at?: string | null;
+  attempt_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function scheduleManualEmail(
+  workspaceId: string,
+  payload: {
+    schedule_at: string;
+    schedule_timezone?: string;
+    record_ids?: string[];
+    external_recipients?: Array<{ email: string; name?: string }>;
+    fallback_recipient_name?: string;
+    sender_id?: string;
+    template_id?: string;
+    subject_template?: string;
+    body_html_template?: string;
+    body_plain_template?: string;
+    layout_json?: unknown;
+    theme_overrides?: Record<string, unknown>;
+  },
+): Promise<{ manual_send_id: string; status: string; recipient_count: number; scheduled_at: string }> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.functions.invoke<{ manual_send_id: string; status: string; recipient_count: number; scheduled_at: string }>('email-manual-schedule', {
+    body: {
+      workspace_id: workspaceId,
+      ...payload,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('No response from email-manual-schedule.');
+  return data;
+}
+
+export async function fetchScheduledManualEmails(
+  workspaceId: string,
+  limit = 100,
+): Promise<ScheduledManualEmail[]> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb
+    .from('email_manual_sends')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ScheduledManualEmail[];
+}
+
+export async function cancelScheduledManualEmail(workspaceId: string, manualSendId: string): Promise<void> {
+  const sb = getSupabaseClient();
+  const { error } = await sb
+    .from('email_manual_sends')
+    .update({
+      status: 'cancelled',
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('workspace_id', workspaceId)
+    .eq('id', manualSendId)
+    .eq('status', 'queued');
+
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchScheduledManualEmailRecipients(
+  workspaceId: string,
+  manualSendId: string,
+): Promise<ScheduledManualEmailRecipient[]> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb
+    .from('email_manual_send_recipients')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('manual_send_id', manualSendId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ScheduledManualEmailRecipient[];
+}
+
+export async function dispatchDueManualEmails(
+  workspaceId: string,
+): Promise<{ due: number; claimed: number; processed_recipients: number; sent_recipients: number; failed_recipients: number; suppressed_recipients: number; executed_at: string }> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.functions.invoke<{
+    due: number;
+    claimed: number;
+    processed_recipients: number;
+    sent_recipients: number;
+    failed_recipients: number;
+    suppressed_recipients: number;
+    executed_at: string;
+  }>('email-manual-dispatch', {
+    body: {
+      workspace_id: workspaceId,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('No response from email-manual-dispatch.');
+  return data;
+}
+
+export async function sendManualEmailNow(
+  workspaceId: string,
+  payload: {
+    record_ids?: string[];
+    external_recipients?: Array<{ email: string; name?: string }>;
+    fallback_recipient_name?: string;
+    sender_id?: string;
+    template_id?: string;
+    subject_template?: string;
+    body_html_template?: string;
+    body_plain_template?: string;
+    layout_json?: unknown;
+    theme_overrides?: Record<string, unknown>;
+  },
+): Promise<{ manual_send_id: string; recipient_count: number; sent_count: number; failed_count: number; suppressed_count: number; failure_samples?: Array<{ recipient_email: string; error: string }> }> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.functions.invoke<{
+    manual_send_id: string;
+    recipient_count: number;
+    sent_count: number;
+    failed_count: number;
+    suppressed_count: number;
+    failure_samples?: Array<{ recipient_email: string; error: string }>;
+  }>('email-manual-send', {
+    body: {
+      workspace_id: workspaceId,
+      ...payload,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('No response from email-manual-send.');
+  return data;
+}

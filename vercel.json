@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/email-followup-dispatch",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/email-manual-dispatch",
+      "schedule": "* * * * *"
     }
   ],
   "rewrites": [

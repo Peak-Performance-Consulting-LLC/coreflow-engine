@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -36,9 +36,13 @@ import {
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { useAuth } from '../hooks/useAuth';
 import type { WorkspaceSummary } from '../lib/types';
+import { getSupabaseClient } from '../lib/supabaseClient';
 import {
   type AccountSettingsGetResponse,
   type EmailProvider,
+  type ManualSendStatus,
+  type ScheduledManualEmail,
+  type ScheduledManualEmailRecipient,
   type EmailSequenceStep,
   type EmailSender,
   EMAIL_PROVIDERS,
@@ -52,6 +56,12 @@ import {
   updateSequenceStep,
   addSequenceStep,
   deleteSequenceStep,
+  scheduleManualEmail,
+  fetchScheduledManualEmails,
+  cancelScheduledManualEmail,
+  fetchScheduledManualEmailRecipients,
+  dispatchDueManualEmails,
+  sendManualEmailNow,
 } from '../lib/email-service';
 
 /* ─── tiny helpers ───────────────────────────────────────────────────── */
@@ -101,14 +111,38 @@ const TABS: { id: Tab; label: string; icon: typeof Mail }[] = [
 type BlockType = 'header' | 'text' | 'image' | 'button' | 'divider' | 'spacer' | 'footer';
 
 interface HeaderBlockData { id: string; type: 'header'; bgColor: string; imageUrl?: string; logoText: string; logoColor: string; padding: number; }
-interface TextBlockData   { id: string; type: 'text';   html: string; bgColor: string; padding: number; }
-interface ImageBlockData  { id: string; type: 'image';  imageUrl: string; altText: string; width: number; align: 'left'|'center'|'right'; link?: string; caption?: string; bgColor: string; }
-interface ButtonBlockData { id: string; type: 'button'; label: string; href: string; bgColor: string; textColor: string; align: 'left'|'center'|'right'; borderRadius: number; btnPadding: string; }
+interface TextBlockData   { id: string; type: 'text';   html: string; bgColor: string; padding: number; borderRadius: number; borderWidth: number; borderColor: string; }
+interface ImageBlockData  { id: string; type: 'image';  imageUrl: string; altText: string; width: number; align: 'left'|'center'|'right'; link?: string; caption?: string; bgColor: string; borderRadius: number; padding: number; shadow: boolean; }
+interface ButtonBlockData { id: string; type: 'button'; label: string; href: string; bgColor: string; textColor: string; align: 'left'|'center'|'right'; borderRadius: number; btnPadding: string; fontSize: number; fullWidth: boolean; borderWidth: number; borderColor: string; }
 interface DividerBlockData{ id: string; type: 'divider'; color: string; thickness: number; marginY: number; bgColor: string; }
 interface SpacerBlockData { id: string; type: 'spacer'; height: number; }
-interface FooterBlockData { id: string; type: 'footer'; html: string; bgColor: string; textColor: string; }
+interface FooterBlockData { id: string; type: 'footer'; html: string; bgColor: string; textColor: string; padding: number; align: 'left'|'center'|'right'; }
 
 type EmailBlock = HeaderBlockData | TextBlockData | ImageBlockData | ButtonBlockData | DividerBlockData | SpacerBlockData | FooterBlockData;
+interface EmailCanvasStyle {
+  outerBgColor: string;
+  containerBgColor: string;
+  containerWidth: number;
+  containerRadius: number;
+  shadowBlur: number;
+  baseFont: string;
+}
+
+const DEFAULT_CANVAS_STYLE: EmailCanvasStyle = {
+  outerBgColor: '#f0f0f0',
+  containerBgColor: '#ffffff',
+  containerWidth: 600,
+  containerRadius: 10,
+  shadowBlur: 24,
+  baseFont: 'Arial, Helvetica, sans-serif',
+};
+
+const CANVAS_FONT_OPTIONS = [
+  { label: 'Classic Sans', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Modern', value: '"Trebuchet MS", "Segoe UI", sans-serif' },
+  { label: 'Elegant Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Friendly Rounded', value: '"Avenir Next", "Nunito Sans", "Segoe UI", sans-serif' },
+];
 
 const BLOCK_ITEMS: { type: BlockType; label: string; emoji: string; desc: string }[] = [
   { type: 'header',  label: 'Header',  emoji: '🏷',  desc: 'Logo / brand top bar' },
@@ -124,17 +158,18 @@ function createDefaultBlock(type: BlockType): EmailBlock {
   const id = `b-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   switch (type) {
     case 'header':  return { id, type: 'header',  bgColor: '#7c3aed', logoText: 'Your Brand', logoColor: '#ffffff', padding: 24 };
-    case 'text':    return { id, type: 'text',    html: '<p style="margin:0;font-size:15px;line-height:1.7;color:#333;">Write your message here. Use clear, friendly language.</p>', bgColor: '#ffffff', padding: 28 };
-    case 'image':   return { id, type: 'image',   imageUrl: '', altText: '', width: 100, align: 'center', bgColor: '#ffffff' };
-    case 'button':  return { id, type: 'button',  label: 'Learn More', href: 'https://', bgColor: '#7c3aed', textColor: '#ffffff', align: 'center', borderRadius: 8, btnPadding: '14px 32px' };
+    case 'text':    return { id, type: 'text',    html: '<p style="margin:0;font-size:15px;line-height:1.7;color:#333;">Write your message here. Use clear, friendly language.</p>', bgColor: '#ffffff', padding: 28, borderRadius: 0, borderWidth: 0, borderColor: '#dbe3f1' };
+    case 'image':   return { id, type: 'image',   imageUrl: '', altText: '', width: 100, align: 'center', bgColor: '#ffffff', borderRadius: 12, padding: 16, shadow: false };
+    case 'button':  return { id, type: 'button',  label: 'Learn More', href: 'https://', bgColor: '#7c3aed', textColor: '#ffffff', align: 'center', borderRadius: 10, btnPadding: '14px 32px', fontSize: 15, fullWidth: false, borderWidth: 0, borderColor: '#7c3aed' };
     case 'divider': return { id, type: 'divider', color: '#e2e8f0', thickness: 1, marginY: 8, bgColor: '#ffffff' };
     case 'spacer':  return { id, type: 'spacer',  height: 24 };
-    case 'footer':  return { id, type: 'footer',  html: '<p style="margin:0;font-size:12px;">© 2025 {{workspace_name}} &nbsp;·&nbsp; <a href="#" style="color:#888;text-decoration:none;">Unsubscribe</a></p>', bgColor: '#f4f4f4', textColor: '#888888' };
+    case 'footer':  return { id, type: 'footer',  html: '<p style="margin:0;font-size:12px;">© 2026 {{workspace_name}} &nbsp;·&nbsp; <a href="#" style="color:#888;text-decoration:none;">Unsubscribe</a></p>', bgColor: '#f4f4f4', textColor: '#888888', padding: 20, align: 'center' };
   }
 }
 
 /* ─── Generate email-safe HTML from blocks ───────────────────────────── */
-function generateEmailHtml(blocks: EmailBlock[], subject: string = ''): string {
+function generateEmailHtml(blocks: EmailBlock[], subject: string = '', canvas: Partial<EmailCanvasStyle> = {}): string {
+  const style = { ...DEFAULT_CANVAS_STYLE, ...canvas };
   const rows = blocks.map(b => {
     switch (b.type) {
       case 'header': return `
@@ -145,19 +180,19 @@ function generateEmailHtml(blocks: EmailBlock[], subject: string = ''): string {
           }
         </td></tr>`;
       case 'text': return `
-        <tr><td style="background:${b.bgColor};padding:${b.padding}px 36px;">${b.html}</td></tr>`;
+        <tr><td style="background:${b.bgColor};padding:${b.padding}px 36px;${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}${b.borderRadius > 0 ? `border-radius:${b.borderRadius}px;` : ''}">${b.html}</td></tr>`;
       case 'image': {
         const alignStyle = b.align === 'center' ? 'margin:0 auto;' : b.align === 'right' ? 'margin-left:auto;' : '';
-        const imgTag = `<img src="${b.imageUrl}" alt="${b.altText || ''}" style="width:${b.width}%;max-width:${b.width}%;height:auto;display:block;${alignStyle}" />`;
+        const imgTag = `<img src="${b.imageUrl}" alt="${b.altText || ''}" style="width:${b.width}%;max-width:${b.width}%;height:auto;display:block;${alignStyle}border-radius:${b.borderRadius}px;${b.shadow ? 'box-shadow:0 10px 24px rgba(15,23,42,0.22);' : ''}" />`;
         return `
-        <tr><td style="background:${b.bgColor};padding:16px 30px;text-align:${b.align};">
+        <tr><td style="background:${b.bgColor};padding:${b.padding}px 30px;text-align:${b.align};">
           ${b.link ? `<a href="${b.link}" style="display:block;">${imgTag}</a>` : imgTag}
           ${b.caption ? `<p style="margin:8px 0 0;font-size:12px;color:#777;text-align:${b.align};">${b.caption}</p>` : ''}
         </td></tr>`;
       }
       case 'button': return `
         <tr><td style="padding:20px 30px;text-align:${b.align};">
-          <a href="${b.href}" style="display:inline-block;background:${b.bgColor};color:${b.textColor};font-size:15px;font-weight:700;text-decoration:none;padding:${b.btnPadding};border-radius:${b.borderRadius}px;letter-spacing:0.2px;">${b.label}</a>
+          <a href="${b.href}" style="display:inline-block;background:${b.bgColor};color:${b.textColor};font-size:${b.fontSize}px;font-weight:700;text-decoration:none;padding:${b.btnPadding};border-radius:${b.borderRadius}px;letter-spacing:0.2px;${b.fullWidth ? 'width:100%;text-align:center;box-sizing:border-box;' : ''}${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}">${b.label}</a>
         </td></tr>`;
       case 'divider': return `
         <tr><td style="background:${b.bgColor};padding:${b.marginY}px 30px;">
@@ -165,7 +200,7 @@ function generateEmailHtml(blocks: EmailBlock[], subject: string = ''): string {
         </td></tr>`;
       case 'spacer': return `<tr><td style="height:${b.height}px;line-height:${b.height}px;">&nbsp;</td></tr>`;
       case 'footer': return `
-        <tr><td style="background:${b.bgColor};color:${b.textColor};padding:20px 30px;text-align:center;font-size:12px;">${b.html}</td></tr>`;
+        <tr><td style="background:${b.bgColor};color:${b.textColor};padding:${b.padding}px 30px;text-align:${b.align};font-size:12px;">${b.html}</td></tr>`;
       default: return '';
     }
   }).join('\n');
@@ -177,17 +212,17 @@ function generateEmailHtml(blocks: EmailBlock[], subject: string = ''): string {
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${subject}</title>
 <style>
-  body{margin:0;padding:0;background:#f0f0f0;font-family:Arial,Helvetica,sans-serif;}
+  body{margin:0;padding:0;background:${style.outerBgColor};font-family:${style.baseFont};}
   a{color:inherit;}
   @media only screen and (max-width:620px){
     .email-wrap{width:100%!important;}
   }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#f0f0f0;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f0f0f0;">
+<body style="margin:0;padding:0;background:${style.outerBgColor};">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${style.outerBgColor};">
 <tr><td align="center" style="padding:24px 12px;">
-<table class="email-wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+<table class="email-wrap" width="${style.containerWidth}" cellpadding="0" cellspacing="0" border="0" style="background:${style.containerBgColor};border-radius:${style.containerRadius}px;overflow:hidden;box-shadow:0 10px ${style.shadowBlur}px rgba(2,6,23,0.14);">
 ${rows}
 </table>
 </td></tr>
@@ -205,40 +240,135 @@ const TEMPLATE_CATEGORIES = ['All', 'Welcome', 'Follow-up', 'Promotional', 'Re-e
 
 const PREMADE_TEMPLATES: EmailTemplate[] = [
   {
-    id: 'pmade-1', name: 'Warm Welcome', category: 'Welcome', tags: ['welcome'], isPremade: true,
+    id: 'pmade-1', name: 'Warm Welcome', category: 'Welcome', tags: ['welcome'], isPremade: true, isHtml: true,
     subject: 'Welcome, {{lead_first_name}}! 👋',
-    body: `Hi {{lead_first_name}},\n\nWelcome! I'm {{sender_name}} from {{workspace_name}}.\n\nI'm thrilled to connect with you. We specialize in helping businesses like yours achieve their goals, and I'd love to learn more about your needs.\n\nCan we schedule a quick 15-minute call this week?\n\nWarm regards,\n{{sender_name}}\n{{workspace_name}}`,
+    body: generateEmailHtml([
+      { id: 'w-h', type: 'header', bgColor: '#312e81', logoText: '{{workspace_name}}', logoColor: '#ffffff', padding: 28 },
+      { id: 'w-t1', type: 'text', bgColor: '#ffffff', padding: 30, borderRadius: 0, borderWidth: 0, borderColor: '#dbeafe', html: '<h1 style="margin:0;font-size:30px;line-height:1.2;color:#0f172a;">Welcome, {{lead_first_name}} 👋</h1><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">Great to connect with you. I am {{sender_name}} from <strong>{{workspace_name}}</strong>, and we help teams turn follow-ups into real pipeline growth.</p><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">If you are open to it, I would love to show you exactly how this works for your business in a short walkthrough.</p>' },
+      { id: 'w-b', type: 'button', label: 'Book a 15-minute call', href: 'https://calendly.com/', bgColor: '#4f46e5', textColor: '#ffffff', align: 'left', borderRadius: 999, btnPadding: '13px 24px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#4f46e5' },
+      { id: 'w-f', type: 'footer', html: '<p style="margin:0 0 6px;">Warm regards,<br/><strong>{{sender_name}}</strong></p><p style="margin:0;">{{workspace_name}} · {{sender_email}}</p>', bgColor: '#f8fafc', textColor: '#64748b', padding: 18, align: 'left' },
+    ], 'Welcome, {{lead_first_name}}! 👋', { outerBgColor: '#eef2ff', containerRadius: 16, shadowBlur: 28 }),
   },
   {
-    id: 'pmade-2', name: 'Friendly Follow-up', category: 'Follow-up', tags: ['follow-up'], isPremade: true,
+    id: 'pmade-2', name: 'Friendly Follow-up', category: 'Follow-up', tags: ['follow-up'], isPremade: true, isHtml: true,
     subject: 'Just checking in, {{lead_first_name}}',
-    body: `Hi {{lead_first_name}},\n\nI wanted to follow up on my previous message.\n\nWe've been helping companies save time and grow faster — I'd love to share how we can do the same for you.\n\nCan we find 10 minutes this week?\n\nBest,\n{{sender_name}}\n{{workspace_name}}`,
+    body: generateEmailHtml([
+      { id: 'f-h', type: 'header', bgColor: '#0f172a', logoText: 'Quick Follow-up', logoColor: '#e2e8f0', padding: 22 },
+      { id: 'f-t1', type: 'text', bgColor: '#ffffff', padding: 28, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', html: '<p style="margin:0;font-size:15px;line-height:1.75;color:#334155;">Hi {{lead_first_name}},</p><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">Wanted to quickly follow up in case this got buried.</p><ul style="margin:14px 0 0 18px;padding:0;font-size:14px;line-height:1.7;color:#334155;"><li>Faster lead response workflows</li><li>Higher conversion from existing inquiries</li><li>Clear campaign performance visibility</li></ul><p style="margin:14px 0 0;font-size:15px;line-height:1.75;color:#334155;">Would a 10-minute chat this week be helpful?</p>' },
+      { id: 'f-b', type: 'button', label: 'Yes, let us talk', href: 'https://calendly.com/', bgColor: '#0f172a', textColor: '#ffffff', align: 'left', borderRadius: 8, btnPadding: '12px 22px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#0f172a' },
+      { id: 'f-f', type: 'footer', html: '<p style="margin:0;">Best,<br/><strong>{{sender_name}}</strong> · {{workspace_name}}</p>', bgColor: '#f8fafc', textColor: '#64748b', padding: 16, align: 'left' },
+    ], 'Just checking in, {{lead_first_name}}', { outerBgColor: '#f1f5f9', containerRadius: 14, shadowBlur: 20 }),
   },
   {
-    id: 'pmade-3', name: 'Value Proposition', category: 'Follow-up', tags: ['value'], isPremade: true,
+    id: 'pmade-3', name: 'Value Proposition', category: 'Follow-up', tags: ['value'], isPremade: true, isHtml: true,
     subject: "{{lead_first_name}}, here's what we can do for you",
-    body: `Hi {{lead_first_name}},\n\nHere's what our clients typically experience:\n✅ 30% increase in lead response rates\n✅ 50% reduction in manual follow-up time\n✅ More qualified conversations every week\n\nWould you like to see how this could work for your business?\n\nBest,\n{{sender_name}}\n{{workspace_name}}`,
+    body: generateEmailHtml([
+      { id: 'v-h', type: 'header', bgColor: '#1d4ed8', logoText: '{{workspace_name}} Performance Snapshot', logoColor: '#ffffff', padding: 22 },
+      { id: 'v-t1', type: 'text', bgColor: '#ffffff', padding: 24, borderRadius: 10, borderWidth: 1, borderColor: '#bfdbfe', html: '<h2 style="margin:0;font-size:24px;color:#0f172a;">What teams usually see in the first month</h2><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:14px;border-collapse:collapse;"><tr><td style="padding:10px;border:1px solid #dbeafe;border-radius:8px;"><strong style="font-size:20px;color:#1d4ed8;">+30%</strong><div style="font-size:12px;color:#475569;margin-top:3px;">Lead response rate</div></td><td style="padding:10px;border:1px solid #dbeafe;border-radius:8px;"><strong style="font-size:20px;color:#1d4ed8;">-50%</strong><div style="font-size:12px;color:#475569;margin-top:3px;">Manual follow-up effort</div></td><td style="padding:10px;border:1px solid #dbeafe;border-radius:8px;"><strong style="font-size:20px;color:#1d4ed8;">+2x</strong><div style="font-size:12px;color:#475569;margin-top:3px;">Qualified conversations</div></td></tr></table><p style="margin:14px 0 0;font-size:15px;line-height:1.75;color:#334155;">If this is aligned with your goals, I can walk you through a tailored setup.</p>' },
+      { id: 'v-b', type: 'button', label: 'Show me how this works', href: 'https://calendly.com/', bgColor: '#1d4ed8', textColor: '#ffffff', align: 'left', borderRadius: 8, btnPadding: '12px 22px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#1d4ed8' },
+      { id: 'v-f', type: 'footer', html: '<p style="margin:0;">{{sender_name}} · {{workspace_name}}</p>', bgColor: '#f8fafc', textColor: '#64748b', padding: 16, align: 'left' },
+    ], "{{lead_first_name}}, here's what we can do for you", { outerBgColor: '#eff6ff', containerRadius: 14, shadowBlur: 24 }),
   },
   {
-    id: 'pmade-4', name: 'Re-engagement', category: 'Re-engagement', tags: ['win-back'], isPremade: true,
+    id: 'pmade-4', name: 'Re-engagement', category: 'Re-engagement', tags: ['win-back'], isPremade: true, isHtml: true,
     subject: 'Still interested, {{lead_first_name}}?',
-    body: `Hi {{lead_first_name}},\n\nIt's been a while since we last connected.\n\nIf you're still looking for solutions, I'd love to reconnect. And if your priorities have shifted, no worries — just let me know.\n\nBest,\n{{sender_name}}\n{{workspace_name}}`,
+    body: generateEmailHtml([
+      { id: 'r-h', type: 'header', bgColor: '#334155', logoText: 'Still on your radar?', logoColor: '#ffffff', padding: 24 },
+      { id: 'r-t1', type: 'text', bgColor: '#ffffff', padding: 26, borderRadius: 0, borderWidth: 0, borderColor: '#e2e8f0', html: '<p style="margin:0;font-size:15px;line-height:1.75;color:#334155;">Hi {{lead_first_name}},</p><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">It has been a little while since we connected, so I wanted to check in.</p><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">If improving lead management is still a priority, I am happy to share a fresh plan. If not, just reply with <strong>Not now</strong> and I will close the loop.</p>' },
+      { id: 'r-b', type: 'button', label: 'Let us reconnect', href: 'https://calendly.com/', bgColor: '#334155', textColor: '#ffffff', align: 'left', borderRadius: 999, btnPadding: '12px 24px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#334155' },
+      { id: 'r-f', type: 'footer', html: '<p style="margin:0;">Thank you,<br/><strong>{{sender_name}}</strong></p>', bgColor: '#f8fafc', textColor: '#64748b', padding: 16, align: 'left' },
+    ], 'Still interested, {{lead_first_name}}?', { outerBgColor: '#f8fafc', containerRadius: 14, shadowBlur: 22 }),
   },
   {
-    id: 'pmade-5', name: 'Special Offer', category: 'Promotional', tags: ['promo'], isPremade: true,
+    id: 'pmade-5', name: 'Special Offer', category: 'Promotional', tags: ['promo'], isPremade: true, isHtml: true,
     subject: '🎁 Exclusive offer for you, {{lead_first_name}}',
-    body: `Hi {{lead_first_name}},\n\nFor a limited time, we're offering a special package — at a significantly reduced price.\n\nThis offer is valid through the end of this week.\n\nReply to learn more!\n\nWarm regards,\n{{sender_name}}\n{{workspace_name}}`,
+    body: generateEmailHtml([
+      { id: 's-h', type: 'header', bgColor: '#7c2d12', logoText: 'Limited-Time Offer', logoColor: '#ffedd5', padding: 24 },
+      { id: 's-t1', type: 'text', bgColor: '#fff7ed', padding: 24, borderRadius: 12, borderWidth: 1, borderColor: '#fed7aa', html: '<h2 style="margin:0;font-size:26px;line-height:1.25;color:#9a3412;">Exclusive offer for {{lead_first_name}}</h2><p style="margin:10px 0 0;font-size:15px;line-height:1.75;color:#7c2d12;">For a short window, we are offering a discounted setup package designed to get your campaigns live quickly.</p><p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#7c2d12;"><strong>Offer ends this week.</strong> Reply to this email and I will share pricing options.</p>' },
+      { id: 's-b', type: 'button', label: 'Claim this offer', href: 'https://example.com/', bgColor: '#ea580c', textColor: '#ffffff', align: 'left', borderRadius: 8, btnPadding: '12px 20px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#ea580c' },
+      { id: 's-f', type: 'footer', html: '<p style="margin:0;">{{sender_name}} · {{workspace_name}}</p>', bgColor: '#fff7ed', textColor: '#9a3412', padding: 16, align: 'left' },
+    ], '🎁 Exclusive offer for you, {{lead_first_name}}', { outerBgColor: '#fff7ed', containerRadius: 16, shadowBlur: 26 }),
+  },
+  {
+    id: 'pmade-6', name: 'Webinar Invitation', category: 'Promotional', tags: ['event', 'webinar'], isPremade: true, isHtml: true,
+    subject: '{{lead_first_name}}, join our live strategy webinar',
+    body: generateEmailHtml([
+      { id: 'e-h', type: 'header', bgColor: '#0f766e', logoText: 'Live Session Invite', logoColor: '#ccfbf1', padding: 24 },
+      { id: 'e-t1', type: 'text', bgColor: '#ffffff', padding: 26, borderRadius: 10, borderWidth: 1, borderColor: '#99f6e4', html: '<h2 style="margin:0;font-size:24px;color:#134e4a;">Join us live this Thursday</h2><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">We are hosting a practical session on improving follow-up conversion using simple automations.</p><ul style="margin:12px 0 0 18px;padding:0;font-size:14px;line-height:1.7;color:#334155;"><li>What to automate first</li><li>What to measure weekly</li><li>How to avoid common deliverability mistakes</li></ul>' },
+      { id: 'e-b', type: 'button', label: 'Reserve my spot', href: 'https://example.com/', bgColor: '#0f766e', textColor: '#ffffff', align: 'left', borderRadius: 8, btnPadding: '12px 22px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#0f766e' },
+      { id: 'e-f', type: 'footer', html: '<p style="margin:0;">Hosted by {{sender_name}} · {{workspace_name}}</p>', bgColor: '#f0fdfa', textColor: '#0f766e', padding: 16, align: 'left' },
+    ], '{{lead_first_name}}, join our live strategy webinar', { outerBgColor: '#ecfeff', containerRadius: 14, shadowBlur: 24 }),
+  },
+  {
+    id: 'pmade-7', name: 'Client Success Story', category: 'Follow-up', tags: ['social-proof', 'case-study'], isPremade: true, isHtml: true,
+    subject: '{{lead_first_name}}, quick success story from a similar business',
+    body: generateEmailHtml([
+      { id: 'cs-h', type: 'header', bgColor: '#4338ca', logoText: 'Client Success Story', logoColor: '#e0e7ff', padding: 24 },
+      { id: 'cs-t', type: 'text', bgColor: '#ffffff', padding: 26, borderRadius: 0, borderWidth: 0, borderColor: '#c7d2fe', html: '<p style="margin:0;font-size:15px;line-height:1.75;color:#334155;">Hi {{lead_first_name}},</p><p style="margin:12px 0 0;font-size:15px;line-height:1.75;color:#334155;">A team in your space recently used this system and moved from inconsistent follow-up to a repeatable workflow in under 3 weeks.</p><blockquote style="margin:14px 0 0;padding:14px;border-left:4px solid #4f46e5;background:#eef2ff;color:#312e81;font-size:14px;line-height:1.7;">“We now follow up faster, track every touchpoint, and close more opportunities with the same team size.”</blockquote><p style="margin:14px 0 0;font-size:15px;line-height:1.75;color:#334155;">If useful, I can share the same rollout framework.</p>' },
+      { id: 'cs-b', type: 'button', label: 'Send me the framework', href: 'https://example.com/', bgColor: '#4f46e5', textColor: '#ffffff', align: 'left', borderRadius: 999, btnPadding: '12px 24px', fontSize: 14, fullWidth: false, borderWidth: 0, borderColor: '#4f46e5' },
+      { id: 'cs-f', type: 'footer', html: '<p style="margin:0;">{{sender_name}} · {{sender_email}}</p>', bgColor: '#f8fafc', textColor: '#64748b', padding: 16, align: 'left' },
+    ], '{{lead_first_name}}, quick success story from a similar business', { outerBgColor: '#eef2ff', containerRadius: 14, shadowBlur: 24 }),
   },
 ];
 
-/* ─── Scheduled email types ───────────────────────────────────────────── */
-type ScheduleStatus = 'pending' | 'sent' | 'failed' | 'cancelled';
-interface ScheduledEmail {
-  id: string; templateId: string; templateName: string; subject: string;
-  leads: string[]; scheduledAt: string; timezone: string; status: ScheduleStatus; createdAt: string;
-}
+/* ─── Scheduling helpers ──────────────────────────────────────────────── */
+interface LeadOption { id: string; label: string; email: string; }
 const TIMEZONES = ['UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Phoenix','Europe/London','Europe/Berlin','Europe/Paris','Asia/Kolkata','Asia/Dubai','Australia/Sydney'];
 const CUSTOM_TEMPLATE_STORAGE_PREFIX = 'coreflow-email-custom-templates';
+
+function parseLeadEmails(raw: string) {
+  return raw
+    .split(/[\n,;]+/)
+    .map(entry => entry.trim().toLowerCase())
+    .filter(entry => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entry));
+}
+
+function getZonedParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const map = new Map(parts.map(part => [part.type, part.value]));
+
+  return {
+    year: Number(map.get('year') ?? 0),
+    month: Number(map.get('month') ?? 1),
+    day: Number(map.get('day') ?? 1),
+    hour: Number(map.get('hour') ?? 0),
+    minute: Number(map.get('minute') ?? 0),
+    second: Number(map.get('second') ?? 0),
+  };
+}
+
+function zonedDateTimeToUtcIso(dateValue: string, timeValue: string, timeZone: string) {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const [hour, minute] = timeValue.split(':').map(Number);
+
+  if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) {
+    throw new Error('Invalid date or time.');
+  }
+
+  let candidate = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+
+  for (let i = 0; i < 3; i += 1) {
+    const zoned = getZonedParts(candidate, timeZone);
+    const expectedUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const zonedUtc = Date.UTC(zoned.year, zoned.month - 1, zoned.day, zoned.hour, zoned.minute, zoned.second);
+    const diffMs = expectedUtc - zonedUtc;
+    if (diffMs === 0) break;
+    candidate = new Date(candidate.getTime() + diffMs);
+  }
+
+  return candidate.toISOString();
+}
 
 function loadStoredCustomTemplates(workspaceId: string): EmailTemplate[] {
   if (typeof window === 'undefined') return [];
@@ -292,13 +422,41 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
+  const [leadOptions, setLeadOptions] = useState<LeadOption[]>([]);
   const [templatesHydrated, setTemplatesHydrated] = useState(false);
   const reload = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setData(await fetchAccountSettings()); }
+    try {
+      setData(await fetchAccountSettings());
+
+      const sb = getSupabaseClient();
+      const { data: records, error: recordsError } = await sb
+        .from('records')
+        .select('id, title, full_name, email')
+        .eq('workspace_id', workspace.id)
+        .is('archived_at', null)
+        .not('email', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(500);
+
+      if (recordsError) {
+        throw new Error(recordsError.message);
+      }
+
+      setLeadOptions(
+        (records ?? [])
+          .map((record) => {
+            const email = typeof record.email === 'string' ? record.email.trim().toLowerCase() : '';
+            if (!email) return null;
+            const label = record.full_name || record.title || email;
+            return { id: record.id, label, email };
+          })
+          .filter((entry): entry is LeadOption => Boolean(entry)),
+      );
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed to load.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [workspace.id]);
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     setTemplatesHydrated(false);
@@ -350,7 +508,7 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
         <>
           {activeTab === 'config' && <ConfigTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
           {activeTab === 'templates' && <TemplatesTab customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
-          {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} />}
+          {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} leadOptions={leadOptions} />}
         </>
       )}
     </WorkspaceLayout>
@@ -755,6 +913,7 @@ function EmailDesigner({
   const [category, setCategory] = useState(initialMeta.category);
   const [subject, setSubject] = useState(initialMeta.subject);
   const [blocks, setBlocks] = useState<EmailBlock[]>(initialBlocks);
+  const [canvasStyle, setCanvasStyle] = useState<EmailCanvasStyle>(DEFAULT_CANVAS_STYLE);
   const [selectedId, setSelectedId] = useState<string | null>(initialBlocks[0]?.id ?? null);
   const [showPreview, setShowPreview] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -803,7 +962,7 @@ function EmailDesigner({
     if (!subject.trim()) { setFormErr('Subject line is required.'); return; }
     if (blocks.length === 0) { setFormErr('Add at least one block to your email.'); return; }
     setFormErr(null);
-    onSave(name, category, subject, generateEmailHtml(blocks, subject));
+    onSave(name, category, subject, generateEmailHtml(blocks, subject, canvasStyle));
   }
 
   return (
@@ -843,6 +1002,23 @@ function EmailDesigner({
             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:border-violet-400 focus:outline-none">
               {['Welcome', 'Follow-up', 'Promotional', 'Re-engagement', 'Custom'].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Canvas Style</p>
+              <label className="block text-[10px] font-semibold text-slate-500">Outer Background</label>
+              <ColorPicker value={canvasStyle.outerBgColor} onChange={v => setCanvasStyle(prev => ({ ...prev, outerBgColor: v }))} />
+              <label className="block text-[10px] font-semibold text-slate-500">Card Background</label>
+              <ColorPicker value={canvasStyle.containerBgColor} onChange={v => setCanvasStyle(prev => ({ ...prev, containerBgColor: v }))} />
+              <label className="block text-[10px] font-semibold text-slate-500">Card Width: {canvasStyle.containerWidth}px</label>
+              <input type="range" min={480} max={700} step={10} value={canvasStyle.containerWidth} onChange={e => setCanvasStyle(prev => ({ ...prev, containerWidth: +e.target.value }))} className="w-full accent-violet-600" />
+              <label className="block text-[10px] font-semibold text-slate-500">Corner Radius: {canvasStyle.containerRadius}px</label>
+              <input type="range" min={0} max={26} step={1} value={canvasStyle.containerRadius} onChange={e => setCanvasStyle(prev => ({ ...prev, containerRadius: +e.target.value }))} className="w-full accent-violet-600" />
+              <label className="block text-[10px] font-semibold text-slate-500">Shadow: {canvasStyle.shadowBlur}px</label>
+              <input type="range" min={0} max={36} step={2} value={canvasStyle.shadowBlur} onChange={e => setCanvasStyle(prev => ({ ...prev, shadowBlur: +e.target.value }))} className="w-full accent-violet-600" />
+              <label className="block text-[10px] font-semibold text-slate-500">Base Font</label>
+              <select value={canvasStyle.baseFont} onChange={e => setCanvasStyle(prev => ({ ...prev, baseFont: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] focus:border-violet-400 focus:outline-none">
+                {CANVAS_FONT_OPTIONS.map(opt => <option key={opt.label} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Block palette */}
@@ -862,7 +1038,15 @@ function EmailDesigner({
         {/* ── Center: Email Canvas ── */}
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <div className="rounded-2xl border border-slate-200 bg-slate-200 p-3 flex-1 overflow-y-auto" style={{ minHeight: 500 }}>
-            <div className="mx-auto rounded-lg overflow-hidden shadow-lg" style={{ maxWidth: 560, background: '#f0f0f0' }}>
+            <div
+              className="mx-auto overflow-hidden"
+              style={{
+                maxWidth: Math.max(420, canvasStyle.containerWidth - 40),
+                background: canvasStyle.containerBgColor,
+                borderRadius: canvasStyle.containerRadius,
+                boxShadow: canvasStyle.shadowBlur > 0 ? `0 10px ${canvasStyle.shadowBlur}px rgba(15,23,42,0.22)` : 'none',
+              }}
+            >
               {blocks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center bg-white">
                   <p className="text-4xl mb-3">📧</p>
@@ -910,7 +1094,7 @@ function EmailDesigner({
       </div>
 
       {showPreview && (
-        <EmailPreviewModal subject={subject} html={generateEmailHtml(blocks, subject)} onClose={() => setShowPreview(false)} />
+        <EmailPreviewModal subject={subject} html={generateEmailHtml(blocks, subject, canvasStyle)} onClose={() => setShowPreview(false)} />
       )}
     </div>
   );
@@ -929,12 +1113,22 @@ function BlockCanvasPreview({ block }: { block: EmailBlock }) {
         </div>
       );
     case 'text':
-      return <div style={{ background: block.bgColor, padding: `${block.padding}px 30px` }} dangerouslySetInnerHTML={{ __html: block.html || '<p style="color:#aaa;margin:0;">Click to edit text...</p>' }} />;
+      return (
+        <div
+          style={{
+            background: block.bgColor,
+            padding: `${block.padding}px 30px`,
+            border: block.borderWidth > 0 ? `${block.borderWidth}px solid ${block.borderColor}` : undefined,
+            borderRadius: block.borderRadius > 0 ? block.borderRadius : undefined,
+          }}
+          dangerouslySetInnerHTML={{ __html: block.html || '<p style="color:#aaa;margin:0;">Click to edit text...</p>' }}
+        />
+      );
     case 'image':
       return (
-        <div style={{ background: block.bgColor, padding: '16px 30px', textAlign: block.align }}>
+        <div style={{ background: block.bgColor, padding: `${block.padding}px 30px`, textAlign: block.align }}>
           {block.imageUrl
-            ? <img src={block.imageUrl} alt={block.altText} style={{ width: `${block.width}%`, maxWidth: `${block.width}%`, height: 'auto', display: 'inline-block' }} />
+            ? <img src={block.imageUrl} alt={block.altText} style={{ width: `${block.width}%`, maxWidth: `${block.width}%`, height: 'auto', display: 'inline-block', borderRadius: block.borderRadius, boxShadow: block.shadow ? '0 10px 24px rgba(15,23,42,0.24)' : 'none' }} />
             : <div style={{ background: '#f0f0f0', height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 13, borderRadius: 6 }}>🖼 Add image URL or upload</div>
           }
           {block.caption && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#777', textAlign: block.align }}>{block.caption}</p>}
@@ -943,7 +1137,7 @@ function BlockCanvasPreview({ block }: { block: EmailBlock }) {
     case 'button':
       return (
         <div style={{ padding: '16px 30px', textAlign: block.align }}>
-          <span style={{ display: 'inline-block', background: block.bgColor, color: block.textColor, fontSize: 14, fontWeight: 700, padding: block.btnPadding, borderRadius: block.borderRadius, cursor: 'default' }}>
+          <span style={{ display: 'inline-block', width: block.fullWidth ? '100%' : undefined, boxSizing: block.fullWidth ? 'border-box' : undefined, textAlign: block.fullWidth ? 'center' : undefined, background: block.bgColor, color: block.textColor, fontSize: block.fontSize, fontWeight: 700, padding: block.btnPadding, borderRadius: block.borderRadius, border: block.borderWidth > 0 ? `${block.borderWidth}px solid ${block.borderColor}` : 'none', cursor: 'default' }}>
             {block.label || 'Button'}
           </span>
         </div>
@@ -953,7 +1147,7 @@ function BlockCanvasPreview({ block }: { block: EmailBlock }) {
     case 'spacer':
       return <div style={{ height: block.height, background: 'repeating-linear-gradient(45deg,#f9f9f9,#f9f9f9 4px,#f0f0f0 4px,#f0f0f0 8px)', opacity: 0.6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 10, color: '#aaa', background: '#fff', padding: '2px 8px', borderRadius: 4 }}>{block.height}px spacer</span></div>;
     case 'footer':
-      return <div style={{ background: block.bgColor, color: block.textColor, padding: '20px 30px', textAlign: 'center', fontSize: 12 }} dangerouslySetInnerHTML={{ __html: block.html }} />;
+      return <div style={{ background: block.bgColor, color: block.textColor, padding: `${block.padding}px 30px`, textAlign: block.align, fontSize: 12 }} dangerouslySetInnerHTML={{ __html: block.html }} />;
   }
 }
 
@@ -1102,6 +1296,13 @@ function TextProps({ block, onChange }: { block: TextBlockData; onChange: (p: Pa
       <input type="range" value={block.padding} onChange={e => onChange({ padding: +e.target.value })} min={8} max={80} className="w-full accent-violet-600" />
       <span className="text-[10px] text-slate-500">{block.padding}px</span>
     </DP>
+    <DP label={`Corner Radius: ${block.borderRadius}px`}>
+      <input type="range" value={block.borderRadius} onChange={e => onChange({ borderRadius: +e.target.value })} min={0} max={24} className="w-full accent-violet-600" />
+    </DP>
+    <DP label={`Border Width: ${block.borderWidth}px`}>
+      <input type="range" value={block.borderWidth} onChange={e => onChange({ borderWidth: +e.target.value })} min={0} max={6} className="w-full accent-violet-600" />
+    </DP>
+    {block.borderWidth > 0 && <DP label="Border Color"><ColorPicker value={block.borderColor} onChange={v => onChange({ borderColor: v })} /></DP>}
   </>);
 }
 
@@ -1137,6 +1338,17 @@ function ImageProps({ block, onChange }: { block: ImageBlockData; onChange: (p: 
     <DP label={`Width: ${block.width}%`}>
       <input type="range" value={block.width} onChange={e => onChange({ width: +e.target.value })} min={20} max={100} step={5} className="w-full accent-violet-600" />
     </DP>
+    <DP label={`Image Radius: ${block.borderRadius}px`}>
+      <input type="range" value={block.borderRadius} onChange={e => onChange({ borderRadius: +e.target.value })} min={0} max={40} className="w-full accent-violet-600" />
+    </DP>
+    <DP label={`Block Padding: ${block.padding}px`}>
+      <input type="range" value={block.padding} onChange={e => onChange({ padding: +e.target.value })} min={0} max={40} className="w-full accent-violet-600" />
+    </DP>
+    <DP label="Image Shadow">
+      <button onClick={() => onChange({ shadow: !block.shadow })} className={cls('w-full rounded-lg border px-2 py-1.5 text-xs font-semibold transition', block.shadow ? 'border-violet-400 bg-violet-100 text-violet-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-violet-300')}>
+        {block.shadow ? 'On (Soft depth)' : 'Off'}
+      </button>
+    </DP>
     <DP label="Alignment"><AlignPicker value={block.align} onChange={v => onChange({ align: v })} /></DP>
     <DP label="Link URL (optional)">
       <input type="url" value={block.link ?? ''} onChange={e => onChange({ link: e.target.value || undefined })} placeholder="https://..." className={piCls} />
@@ -1163,12 +1375,24 @@ function ButtonProps({ block, onChange }: { block: ButtonBlockData; onChange: (p
     <DP label={`Corner Radius: ${block.borderRadius}px`}>
       <input type="range" value={block.borderRadius} onChange={e => onChange({ borderRadius: +e.target.value })} min={0} max={50} className="w-full accent-violet-600" />
     </DP>
+    <DP label={`Font Size: ${block.fontSize}px`}>
+      <input type="range" value={block.fontSize} onChange={e => onChange({ fontSize: +e.target.value })} min={12} max={22} className="w-full accent-violet-600" />
+    </DP>
+    <DP label="Full Width CTA">
+      <button onClick={() => onChange({ fullWidth: !block.fullWidth })} className={cls('w-full rounded-lg border px-2 py-1.5 text-xs font-semibold transition', block.fullWidth ? 'border-violet-400 bg-violet-100 text-violet-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-violet-300')}>
+        {block.fullWidth ? 'Enabled' : 'Disabled'}
+      </button>
+    </DP>
+    <DP label={`Border Width: ${block.borderWidth}px`}>
+      <input type="range" value={block.borderWidth} onChange={e => onChange({ borderWidth: +e.target.value })} min={0} max={4} className="w-full accent-violet-600" />
+    </DP>
+    {block.borderWidth > 0 && <DP label="Border Color"><ColorPicker value={block.borderColor} onChange={v => onChange({ borderColor: v })} /></DP>}
     <DP label="Padding">
       <input type="text" value={block.btnPadding} onChange={e => onChange({ btnPadding: e.target.value })} placeholder="14px 32px" className={piCls} />
       <p className="text-[10px] text-slate-400 mt-0.5">Format: top/bottom left/right — e.g. 14px 32px</p>
     </DP>
     <div className="rounded-xl p-3 border border-slate-100 bg-slate-50 text-center">
-      <span style={{ display: 'inline-block', background: block.bgColor, color: block.textColor, fontSize: 13, fontWeight: 700, padding: block.btnPadding, borderRadius: block.borderRadius }}>
+      <span style={{ display: 'inline-block', width: block.fullWidth ? '100%' : undefined, boxSizing: block.fullWidth ? 'border-box' : undefined, textAlign: block.fullWidth ? 'center' : undefined, background: block.bgColor, color: block.textColor, fontSize: block.fontSize, fontWeight: 700, padding: block.btnPadding, borderRadius: block.borderRadius, border: block.borderWidth > 0 ? `${block.borderWidth}px solid ${block.borderColor}` : 'none' }}>
         {block.label || 'Button'}
       </span>
     </div>
@@ -1222,6 +1446,10 @@ function FooterProps({ block, onChange }: { block: FooterBlockData; onChange: (p
     </DP>
     <DP label="Background Color"><ColorPicker value={block.bgColor} onChange={v => onChange({ bgColor: v })} /></DP>
     <DP label="Text Color"><ColorPicker value={block.textColor} onChange={v => onChange({ textColor: v })} /></DP>
+    <DP label="Alignment"><AlignPicker value={block.align} onChange={v => onChange({ align: v })} /></DP>
+    <DP label={`Padding: ${block.padding}px`}>
+      <input type="range" value={block.padding} onChange={e => onChange({ padding: +e.target.value })} min={10} max={40} className="w-full accent-violet-600" />
+    </DP>
   </>);
 }
 
@@ -1270,11 +1498,12 @@ function EmailPreviewModal({ subject, html, onClose }: { subject: string; html: 
 /* ══════════════════════════════════════════════════════════════════════
    TAB 3 — Scheduling & Automation
 ══════════════════════════════════════════════════════════════════════════ */
-type SchedulingSubTab = 'schedule' | 'automation' | 'manual';
+type SchedulingSubTab = 'schedule' | 'automation' | 'manual' | 'monitor';
 const SCHEDULING_SUBTABS: { id: SchedulingSubTab; label: string; icon: typeof Mail; desc: string }[] = [
   { id: 'schedule',   label: 'Schedule Email',  icon: Calendar, desc: 'Send at a specific date & time' },
   { id: 'automation', label: 'Auto Sequences',  icon: Zap,      desc: 'Automated drip emails for leads' },
   { id: 'manual',     label: 'Send Now',        icon: Send,     desc: 'Send an email immediately' },
+  { id: 'monitor',    label: 'Monitor',         icon: Eye,      desc: 'View scheduled queue and send history' },
 ];
 
 function SchedulingTab({
@@ -1282,18 +1511,101 @@ function SchedulingTab({
   workspaceId,
   onRefresh,
   allTemplates,
+  leadOptions,
 }: {
   data: AccountSettingsGetResponse | null;
   workspaceId: string;
   onRefresh: () => void;
   allTemplates: EmailTemplate[];
+  leadOptions: LeadOption[];
 }) {
   const [subTab, setSubTab] = useState<SchedulingSubTab>('schedule');
+  const [scheduledRuns, setScheduledRuns] = useState<ScheduledManualEmail[]>([]);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [dispatchingDue, setDispatchingDue] = useState(false);
+  const [monitorError, setMonitorError] = useState<string | null>(null);
   const steps = data?.sequence_steps ?? [];
   const automation = data?.automation;
+
+  const refreshScheduledRuns = useCallback(async (options?: { silent?: boolean }) => {
+    const isSilent = options?.silent === true;
+    if (!isSilent) {
+      setMonitorLoading(true);
+    }
+    setMonitorError(null);
+
+    let dispatchError: string | null = null;
+    try {
+      await dispatchDueManualEmails(workspaceId);
+    } catch (err) {
+      dispatchError = err instanceof Error ? err.message : 'Unable to dispatch due emails.';
+    }
+
+    try {
+      const runs = await fetchScheduledManualEmails(workspaceId, 150);
+      setScheduledRuns(runs);
+      if (dispatchError) {
+        setMonitorError(`Dispatch warning: ${dispatchError}`);
+      }
+    } catch (err) {
+      setMonitorError(err instanceof Error ? err.message : 'Unable to load schedule monitor.');
+    } finally {
+      if (!isSilent) {
+        setMonitorLoading(false);
+      }
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    void refreshScheduledRuns();
+  }, [refreshScheduledRuns]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshScheduledRuns({ silent: true });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshScheduledRuns]);
+
+  const runDueNow = useCallback(async () => {
+    setDispatchingDue(true);
+    try {
+      const result = await dispatchDueManualEmails(workspaceId);
+      await refreshScheduledRuns({ silent: true });
+
+      if (result.claimed === 0 && result.processed_recipients === 0) {
+        toast.info('No due scheduled emails right now.');
+      } else {
+        toast.success(
+          `Processed ${result.processed_recipients} recipient(s): sent ${result.sent_recipients}, failed ${result.failed_recipients}, suppressed ${result.suppressed_recipients}.`,
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to run due scheduled emails.';
+      setMonitorError(message);
+      toast.error(message);
+    } finally {
+      setDispatchingDue(false);
+    }
+  }, [refreshScheduledRuns, workspaceId]);
+
+  const queuedRuns = useMemo(
+    () => scheduledRuns
+      .filter(run => run.status === 'queued')
+      .sort((a, b) => Date.parse(a.scheduled_at || '') - Date.parse(b.scheduled_at || '')),
+    [scheduledRuns],
+  );
+
+  const historyRuns = useMemo(
+    () => scheduledRuns
+      .filter(run => run.status !== 'queued')
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)),
+    [scheduledRuns],
+  );
+
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {SCHEDULING_SUBTABS.map(st => {
           const Icon = st.icon; const isActive = subTab === st.id;
           return (
@@ -1306,39 +1618,156 @@ function SchedulingTab({
           );
         })}
       </div>
-      {subTab === 'schedule'   && <ScheduleEmailPanel allTemplates={allTemplates} />}
+
+      {subTab === 'schedule'   && (
+        <ScheduleEmailPanel
+          workspaceId={workspaceId}
+          allTemplates={allTemplates}
+          leadOptions={leadOptions}
+          queuedRuns={queuedRuns}
+          onScheduled={refreshScheduledRuns}
+        />
+      )}
       {subTab === 'automation' && <AutomationPanel workspaceId={workspaceId} steps={steps} automation={automation} onRefresh={onRefresh} />}
-      {subTab === 'manual'     && <ManualSendPanel allTemplates={allTemplates} />}
+      {subTab === 'manual'     && <ManualSendPanel workspaceId={workspaceId} allTemplates={allTemplates} leadOptions={leadOptions} />}
+      {subTab === 'monitor'    && (
+        <ScheduleMonitorPanel
+          workspaceId={workspaceId}
+          queuedRuns={queuedRuns}
+          historyRuns={historyRuns}
+          loading={monitorLoading}
+          dispatchingDue={dispatchingDue}
+          error={monitorError}
+          onRefresh={refreshScheduledRuns}
+          onRunDueNow={runDueNow}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── Schedule Email Panel (step wizard) ─────────────────────────────── */
 type ScheduleStep = 1 | 2 | 3 | 4;
-function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] }) {
+function ScheduleEmailPanel({
+  workspaceId,
+  allTemplates,
+  leadOptions,
+  queuedRuns,
+  onScheduled,
+}: {
+  workspaceId: string;
+  allTemplates: EmailTemplate[];
+  leadOptions: LeadOption[];
+  queuedRuns: ScheduledManualEmail[];
+  onScheduled: () => Promise<void>;
+}) {
   const [step, setStep] = useState<ScheduleStep>(1);
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const [leadsInput, setLeadsInput] = useState('');
+  const [leadSearch, setLeadSearch] = useState('');
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [parsedLeads, setParsedLeads] = useState<string[]>([]);
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('09:00');
   const [schedTz, setSchedTz] = useState('Asia/Kolkata');
-  const [scheduledEmails, setScheduledEmails] = useState<ScheduledEmail[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [stepErr, setStepErr] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  function parseLeads(raw: string) { return raw.split(/[\n,;]+/).map(s => s.trim()).filter(s => s.includes('@')); }
+  const leadEmailById = useMemo(() => new Map(leadOptions.map(l => [l.id, l.email])), [leadOptions]);
+  const selectedLeadEmails = useMemo(
+    () => selectedLeadIds.map(id => leadEmailById.get(id) || '').filter(Boolean),
+    [leadEmailById, selectedLeadIds],
+  );
+  const filteredLeadOptions = useMemo(() => {
+    const term = leadSearch.trim().toLowerCase();
+    const pool = term
+      ? leadOptions.filter(option => `${option.label} ${option.email}`.toLowerCase().includes(term))
+      : leadOptions;
+    return pool.slice(0, 150);
+  }, [leadOptions, leadSearch]);
 
-  function goNext() {
+  function combineLeads(raw: string, selectedEmails: string[]) {
+    return Array.from(new Set([...parseLeadEmails(raw), ...selectedEmails]));
+  }
+
+  function toggleLeadSelection(leadId: string) {
+    setSelectedLeadIds(prev => (prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId]));
+  }
+
+  function applySelectedLeadsToInput() {
+    const merged = combineLeads(leadsInput, selectedLeadEmails);
+    setLeadsInput(merged.join('\n'));
+  }
+
+  async function goNext() {
     setStepErr(null);
     if (step === 1 && !selectedTemplate) { setStepErr('Please select a template.'); return; }
-    if (step === 2) { const leads = parseLeads(leadsInput); if (leads.length === 0) { setStepErr('Add at least one valid email address.'); return; } setParsedLeads(leads); }
-    if (step === 3) { if (!schedDate) { setStepErr('Please select a date.'); return; } if (new Date(`${schedDate}T${schedTime}`) <= new Date()) { setStepErr('Please choose a future date and time.'); return; } }
+    if (step === 2) {
+      const leads = combineLeads(leadsInput, selectedLeadEmails);
+      if (leads.length === 0) { setStepErr('Add at least one valid email address or select a lead.'); return; }
+      setParsedLeads(leads);
+    }
+    if (step === 3) {
+      if (!schedDate) { setStepErr('Please select a date.'); return; }
+      try {
+        const scheduledAtIso = zonedDateTimeToUtcIso(schedDate, schedTime, schedTz);
+        if (Date.parse(scheduledAtIso) <= Date.now()) {
+          setStepErr('Please choose a future date and time.');
+          return;
+        }
+      } catch (err) {
+        setStepErr(err instanceof Error ? err.message : 'Invalid schedule date/time.');
+        return;
+      }
+    }
     if (step === 4) {
-      setScheduledEmails(prev => [{ id: `sched-${Date.now()}`, templateId: selectedTemplate!.id, templateName: selectedTemplate!.name, subject: selectedTemplate!.subject, leads: parsedLeads, scheduledAt: new Date(`${schedDate}T${schedTime}`).toISOString(), timezone: schedTz, status: 'pending', createdAt: new Date().toISOString() }, ...prev]);
-      toast.success(`Email scheduled for ${parsedLeads.length} lead(s)!`);
-      setSent(true); setStep(1); setSelectedTemplate(null); setLeadsInput(''); setParsedLeads([]); setSchedDate(''); setSchedTime('09:00');
-      setTimeout(() => setSent(false), 5000); return;
+      const leads = parsedLeads.length > 0 ? parsedLeads : combineLeads(leadsInput, selectedLeadEmails);
+      if (!selectedTemplate) { setStepErr('Please select a template.'); return; }
+      if (leads.length === 0) { setStepErr('No valid recipients found.'); return; }
+
+      let scheduledAtIso = '';
+      try {
+        scheduledAtIso = zonedDateTimeToUtcIso(schedDate, schedTime, schedTz);
+      } catch (err) {
+        setStepErr(err instanceof Error ? err.message : 'Invalid schedule date/time.');
+        return;
+      }
+
+      if (Date.parse(scheduledAtIso) <= Date.now()) {
+        setStepErr('Please choose a future date and time.');
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const scheduleResult = await scheduleManualEmail(workspaceId, {
+          schedule_at: scheduledAtIso,
+          schedule_timezone: schedTz,
+          external_recipients: leads.map(email => ({ email })),
+          subject_template: selectedTemplate.subject,
+          body_html_template: selectedTemplate.isHtml ? selectedTemplate.body : undefined,
+          body_plain_template: selectedTemplate.isHtml ? undefined : selectedTemplate.body,
+        });
+
+        toast.success(`Scheduled for ${scheduleResult.recipient_count} recipient(s).`);
+        await onScheduled();
+        setSent(true);
+        setStep(1);
+        setSelectedTemplate(null);
+        setLeadsInput('');
+        setLeadSearch('');
+        setSelectedLeadIds([]);
+        setParsedLeads([]);
+        setSchedDate('');
+        setSchedTime('09:00');
+        setTimeout(() => setSent(false), 5000);
+      } catch (err) {
+        setStepErr(err instanceof Error ? err.message : 'Failed to schedule email.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
     }
     setStep(s => (s + 1) as ScheduleStep);
   }
@@ -1404,9 +1833,51 @@ function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] })
         )}
         {step === 2 && (
           <div className="space-y-3">
-            <div><p className="text-base font-bold text-slate-800">Add Lead Emails</p><p className="text-sm text-slate-500 mt-0.5">Paste email addresses — one per line, or separated by commas.</p></div>
+            <div><p className="text-base font-bold text-slate-800">Add Lead Emails</p><p className="text-sm text-slate-500 mt-0.5">Paste email addresses, or select leads from your workspace.</p></div>
+            {leadOptions.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Select Leads</p>
+                  <p className="text-xs text-slate-500">Selected: <span className="font-semibold text-violet-700">{selectedLeadIds.length}</span></p>
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={leadSearch}
+                    onChange={e => setLeadSearch(e.target.value)}
+                    placeholder="Search leads by name or email"
+                    className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
+                  />
+                </div>
+                <div className="max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white">
+                  {filteredLeadOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-slate-400">No leads found.</p>
+                  ) : (
+                    filteredLeadOptions.map(lead => (
+                      <label key={lead.id} className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={selectedLeadIds.includes(lead.id)}
+                          onChange={() => toggleLeadSelection(lead.id)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+                        />
+                        <span className="truncate text-xs font-medium text-slate-700">{lead.label}</span>
+                        <span className="ml-auto truncate text-[11px] text-slate-500">{lead.email}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-slate-500">Selected lead emails are included automatically when you continue.</p>
+                  <button type="button" onClick={applySelectedLeadsToInput} className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100">
+                    Add Selected To Textarea
+                  </button>
+                </div>
+              </div>
+            )}
             <textarea value={leadsInput} onChange={e => setLeadsInput(e.target.value)} rows={8} placeholder={`john@example.com\njane@company.com`} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-mono resize-none focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100" />
-            {leadsInput.trim() && <p className="text-xs text-slate-500">Detected: <span className="font-bold text-violet-600">{parseLeads(leadsInput).length} lead(s)</span></p>}
+            {(leadsInput.trim() || selectedLeadIds.length > 0) && <p className="text-xs text-slate-500">Detected: <span className="font-bold text-violet-600">{combineLeads(leadsInput, selectedLeadEmails).length} lead(s)</span></p>}
             <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">💡 <strong>Tip:</strong> Separate multiple emails by new lines, commas, or semicolons.</div>
           </div>
         )}
@@ -1418,7 +1889,7 @@ function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] })
               <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Send Time *</label><input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none" /></div>
             </div>
             <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Timezone</label><select value={schedTz} onChange={e => setSchedTz(e.target.value)} className="w-full max-w-xs rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none">{TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}</select></div>
-            {schedDate && <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800"><Timer className="inline h-4 w-4 mr-1.5 text-violet-500" />Sending on <strong>{new Date(`${schedDate}T${schedTime}`).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong> at <strong>{schedTime}</strong> ({schedTz})</div>}
+            {schedDate && <div className="rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-800"><Timer className="inline h-4 w-4 mr-1.5 text-violet-500" />Sending on <strong>{schedDate}</strong> at <strong>{schedTime}</strong> ({schedTz})</div>}
           </div>
         )}
         {step === 4 && (
@@ -1435,31 +1906,215 @@ function ScheduleEmailPanel({ allTemplates }: { allTemplates: EmailTemplate[] })
         {stepErr && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><AlertCircle className="h-4 w-4 shrink-0 text-red-500" />{stepErr}</div>}
         <div className="mt-auto flex items-center justify-between pt-3 border-t border-slate-100">
           <button onClick={() => { setStepErr(null); setStep(s => Math.max(1, s - 1) as ScheduleStep); }} disabled={step === 1} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40">← Back</button>
-          <button onClick={goNext} className={cls('flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95 shadow-sm', step === 4 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-violet-600 hover:bg-violet-700')}>
-            {step === 4 ? <><Calendar className="h-4 w-4" />Confirm & Schedule</> : <>Continue <ArrowRight className="h-4 w-4" /></>}
+          <button onClick={() => { void goNext(); }} disabled={submitting} className={cls('flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition active:scale-95 shadow-sm disabled:opacity-60', step === 4 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-violet-600 hover:bg-violet-700')}>
+            {submitting ? <><RefreshCw className="h-4 w-4 animate-spin" />Scheduling...</> : step === 4 ? <><Calendar className="h-4 w-4" />Confirm & Schedule</> : <>Continue <ArrowRight className="h-4 w-4" /></>}
           </button>
         </div>
       </div>
 
-      {scheduledEmails.length > 0 && (
+      {queuedRuns.length > 0 && (
         <div>
-          <div className="flex items-center gap-2 mb-3"><Clock className="h-4 w-4 text-violet-500" /><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Scheduled Queue</span><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-600">{scheduledEmails.length}</span></div>
+          <div className="flex items-center gap-2 mb-3"><Clock className="h-4 w-4 text-violet-500" /><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Scheduled Queue</span><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-600">{queuedRuns.length}</span></div>
           <div className="space-y-2">
-            {scheduledEmails.map(se => {
-              const statusColors: Record<ScheduleStatus, string> = { pending: 'bg-amber-100 text-amber-700', sent: 'bg-emerald-100 text-emerald-700', failed: 'bg-red-100 text-red-700', cancelled: 'bg-slate-100 text-slate-500' };
-              const dt = new Date(se.scheduledAt);
+            {queuedRuns.slice(0, 6).map(run => {
+              const dt = new Date(run.scheduled_at || run.created_at);
               return (
-                <div key={se.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div key={run.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50"><Calendar className="h-4 w-4 text-violet-500" /></div>
-                  <div className="flex-1 min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{se.templateName}</p><p className="text-xs text-slate-500 mt-0.5">{se.leads.length} recipient(s) · {dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p></div>
-                  <span className={cls('rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize shrink-0', statusColors[se.status])}>{se.status}</span>
-                  {se.status === 'pending' && <button onClick={() => { if (!confirm('Cancel?')) return; setScheduledEmails(prev => prev.map(x => x.id === se.id ? { ...x, status: 'cancelled' } : x)); toast.success('Cancelled.'); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>}
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">{run.subject_template}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{run.recipient_count} recipient(s) · {dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at {dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                  <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize shrink-0 bg-amber-100 text-amber-700">{run.status}</span>
                 </div>
               );
             })}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ScheduleMonitorPanel({
+  workspaceId,
+  queuedRuns,
+  historyRuns,
+  loading,
+  dispatchingDue,
+  error,
+  onRefresh,
+  onRunDueNow,
+}: {
+  workspaceId: string;
+  queuedRuns: ScheduledManualEmail[];
+  historyRuns: ScheduledManualEmail[];
+  loading: boolean;
+  dispatchingDue: boolean;
+  error: string | null;
+  onRefresh: () => Promise<void>;
+  onRunDueNow: () => Promise<void>;
+}) {
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [recipientsByRun, setRecipientsByRun] = useState<Record<string, ScheduledManualEmailRecipient[]>>({});
+  const [recipientLoadingId, setRecipientLoadingId] = useState<string | null>(null);
+  const [actioningRunId, setActioningRunId] = useState<string | null>(null);
+
+  const statusClass: Record<ManualSendStatus, string> = {
+    queued: 'bg-amber-100 text-amber-700',
+    sending: 'bg-blue-100 text-blue-700',
+    completed: 'bg-emerald-100 text-emerald-700',
+    failed: 'bg-red-100 text-red-700',
+    cancelled: 'bg-slate-100 text-slate-600',
+  };
+
+  async function handleCancel(run: ScheduledManualEmail) {
+    if (!confirm('Cancel this scheduled email?')) return;
+    setActioningRunId(run.id);
+    try {
+      await cancelScheduledManualEmail(workspaceId, run.id);
+      toast.success('Scheduled email cancelled.');
+      await onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel schedule.');
+    } finally {
+      setActioningRunId(null);
+    }
+  }
+
+  async function toggleRecipients(runId: string) {
+    if (expandedRunId === runId) {
+      setExpandedRunId(null);
+      return;
+    }
+
+    setExpandedRunId(runId);
+    if (recipientsByRun[runId]) return;
+
+    setRecipientLoadingId(runId);
+    try {
+      const recipients = await fetchScheduledManualEmailRecipients(workspaceId, runId);
+      setRecipientsByRun(prev => ({ ...prev, [runId]: recipients }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load recipient details.');
+    } finally {
+      setRecipientLoadingId(null);
+    }
+  }
+
+  function renderRunCard(run: ScheduledManualEmail, allowCancel: boolean) {
+    const dt = new Date(run.scheduled_at || run.created_at);
+    const recipients = recipientsByRun[run.id] ?? [];
+    const expanded = expandedRunId === run.id;
+
+    return (
+      <div key={run.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50">
+            <Mail className="h-4 w-4 text-violet-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-800">{run.subject_template}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {run.recipient_count} recipient(s) · {dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} {dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <span className={cls('rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize shrink-0', statusClass[run.status])}>{run.status}</span>
+          {allowCancel && (
+            <button
+              type="button"
+              onClick={() => { void handleCancel(run); }}
+              disabled={actioningRunId === run.id}
+              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          )}
+          <button onClick={() => { void toggleRecipients(run.id); }} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+            {expanded ? 'Hide' : 'Recipients'}
+          </button>
+        </div>
+        {expanded && (
+          <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+            {recipientLoadingId === run.id ? (
+              <p className="text-xs text-slate-500">Loading recipients...</p>
+            ) : recipients.length === 0 ? (
+              <p className="text-xs text-slate-500">No recipients found.</p>
+            ) : (
+              <div className="max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white">
+                {recipients.map(recipient => (
+                  <div key={recipient.id} className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-xs last:border-b-0">
+                    <span className="truncate font-medium text-slate-700">{recipient.recipient_name || recipient.recipient_email}</span>
+                    <span className="ml-auto truncate text-slate-500">{recipient.recipient_email}</span>
+                    <span className={cls('rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize', recipient.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : recipient.status === 'pending' ? 'bg-amber-100 text-amber-700' : recipient.status === 'unsubscribed' ? 'bg-slate-100 text-slate-600' : 'bg-red-100 text-red-700')}>
+                      {recipient.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-bold text-slate-800">Schedule Monitor</h3>
+          <p className="text-sm text-slate-500 mt-0.5">Track queued campaigns and sent history in real time.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { void onRunDueNow(); }}
+            disabled={dispatchingDue}
+            className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-60"
+          >
+            <Send className={cls('h-3.5 w-3.5', dispatchingDue && 'animate-pulse')} /> Run Due Now
+          </button>
+          <button onClick={() => { void onRefresh(); }} disabled={loading} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+            <RefreshCw className={cls('h-3.5 w-3.5', loading && 'animate-spin')} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-500" /> {error}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-violet-500" />
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Scheduled Queue</p>
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">{queuedRuns.length}</span>
+        </div>
+        {queuedRuns.length === 0 ? (
+          <p className="text-sm text-slate-500">No queued scheduled emails.</p>
+        ) : (
+          <div className="space-y-2">
+            {queuedRuns.map(run => renderRunCard(run, true))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <MailOpen className="h-4 w-4 text-emerald-500" />
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Send History</p>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{historyRuns.length}</span>
+        </div>
+        {historyRuns.length === 0 ? (
+          <p className="text-sm text-slate-500">No history yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {historyRuns.map(run => renderRunCard(run, false))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1556,23 +2211,101 @@ function AutomationPanel({ workspaceId, steps, automation, onRefresh }: { worksp
 }
 
 /* ─── Manual Send Panel ───────────────────────────────────────────────── */
-function ManualSendPanel({ allTemplates }: { allTemplates: EmailTemplate[] }) {
-  const [useTemplate, setUseTemplate] = useState(false), [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
-  const [toEmails, setToEmails] = useState(''), [subject, setSubject] = useState(''), [body, setBody] = useState('');
-  const [sending, setSending] = useState(false), [sent, setSent] = useState(false), [sendErr, setSendErr] = useState<string | null>(null);
-  function parseLeads(raw: string) { return raw.split(/[\n,;]+/).map(s => s.trim()).filter(s => s.includes('@')); }
-  function handleSelectTemplate(t: EmailTemplate | null) { setSelectedTemplate(t); if (t) { setSubject(t.subject); setBody(t.isHtml ? '(Rich HTML template selected — cannot edit inline)' : t.body); } else { setSubject(''); setBody(''); } }
+function ManualSendPanel({
+  workspaceId,
+  allTemplates,
+  leadOptions,
+}: {
+  workspaceId: string;
+  allTemplates: EmailTemplate[];
+  leadOptions: LeadOption[];
+}) {
+  const [useTemplate, setUseTemplate] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
+  const [toEmails, setToEmails] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [leadSearch, setLeadSearch] = useState('');
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendErr, setSendErr] = useState<string | null>(null);
+
+  const leadEmailById = useMemo(() => new Map(leadOptions.map(l => [l.id, l.email])), [leadOptions]);
+  const selectedLeadEmails = useMemo(
+    () => selectedLeadIds.map(id => leadEmailById.get(id) || '').filter(Boolean),
+    [leadEmailById, selectedLeadIds],
+  );
+
+  const filteredLeadOptions = useMemo(() => {
+    const term = leadSearch.trim().toLowerCase();
+    const pool = term
+      ? leadOptions.filter(option => `${option.label} ${option.email}`.toLowerCase().includes(term))
+      : leadOptions;
+    return pool.slice(0, 120);
+  }, [leadOptions, leadSearch]);
+
+  function combineRecipients() {
+    return Array.from(new Set([...parseLeadEmails(toEmails), ...selectedLeadEmails]));
+  }
+
+  function handleSelectTemplate(template: EmailTemplate | null) {
+    setSelectedTemplate(template);
+    if (!template) {
+      setSubject('');
+      setBody('');
+      return;
+    }
+    setSubject(template.subject);
+    if (!template.isHtml) {
+      setBody(template.body);
+    }
+  }
+
+  function toggleLeadSelection(leadId: string) {
+    setSelectedLeadIds(prev => (prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId]));
+  }
+
+  function addSelectedLeadsToTextarea() {
+    setToEmails(combineRecipients().join('\n'));
+  }
+
   async function handleSend() {
     setSendErr(null);
-    const leads = parseLeads(toEmails);
-    if (leads.length === 0) { setSendErr('Enter at least one valid email address.'); return; }
+    const recipients = combineRecipients();
+    if (recipients.length === 0) { setSendErr('Enter at least one valid email address or select a lead.'); return; }
     if (!subject.trim()) { setSendErr('Subject is required.'); return; }
-    if (!body.trim()) { setSendErr('Message body is required.'); return; }
-    setSending(true); await new Promise(r => setTimeout(r, 1200)); setSending(false); setSent(true);
-    setToEmails(''); setSubject(''); setBody(''); setSelectedTemplate(null);
-    toast.success(`Email sent to ${leads.length} recipient(s)!`);
-    setTimeout(() => setSent(false), 5000);
+    if (!selectedTemplate?.isHtml && !body.trim()) { setSendErr('Message body is required.'); return; }
+
+    setSending(true);
+    try {
+      const result = await sendManualEmailNow(workspaceId, {
+        external_recipients: recipients.map(email => ({ email })),
+        subject_template: subject,
+        body_html_template: selectedTemplate?.isHtml ? selectedTemplate.body : undefined,
+        body_plain_template: selectedTemplate?.isHtml ? undefined : body,
+      });
+
+      setSent(true);
+      setToEmails('');
+      setSubject('');
+      setBody('');
+      setSelectedTemplate(null);
+      setSelectedLeadIds([]);
+      setLeadSearch('');
+      toast.success(`Sent to ${result.sent_count}/${result.recipient_count} recipient(s).`);
+      if (result.failed_count > 0) {
+        toast.error(`${result.failed_count} recipient(s) failed. Check Monitor history.`);
+      }
+      setTimeout(() => setSent(false), 5000);
+    } catch (err) {
+      setSendErr(err instanceof Error ? err.message : 'Failed to send email.');
+    } finally {
+      setSending(false);
+    }
   }
+
+  const recipientCount = combineRecipients().length;
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-5 py-4 flex items-start gap-3">
@@ -1581,7 +2314,55 @@ function ManualSendPanel({ allTemplates }: { allTemplates: EmailTemplate[] }) {
       </div>
       {sent && <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /><div><p className="font-semibold">Email Sent!</p><p className="text-xs text-emerald-600 mt-0.5">Your email has been delivered.</p></div></div>}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-        <div><label className="block text-xs font-semibold text-slate-600 mb-1.5"><Users className="inline h-3.5 w-3.5 mr-1 text-slate-400" />To (Recipients) *</label><textarea value={toEmails} onChange={e => setToEmails(e.target.value)} rows={3} placeholder="john@example.com, jane@company.com or one per line" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-mono resize-none focus:border-violet-400 focus:outline-none" />{toEmails.trim() && <p className="mt-1 text-xs text-slate-500">{parseLeads(toEmails).length} recipient(s) detected</p>}</div>
+        {leadOptions.length > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Select Leads</p>
+              <p className="text-xs text-slate-500">Selected: <span className="font-semibold text-violet-700">{selectedLeadIds.length}</span></p>
+            </div>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={leadSearch}
+                onChange={e => setLeadSearch(e.target.value)}
+                placeholder="Search leads by name or email"
+                className="w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
+              />
+            </div>
+            <div className="max-h-40 overflow-auto rounded-lg border border-slate-200 bg-white">
+              {filteredLeadOptions.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-slate-400">No leads found.</p>
+              ) : (
+                filteredLeadOptions.map(lead => (
+                  <label key={lead.id} className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-b-0 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeadIds.includes(lead.id)}
+                      onChange={() => toggleLeadSelection(lead.id)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600"
+                    />
+                    <span className="truncate text-xs font-medium text-slate-700">{lead.label}</span>
+                    <span className="ml-auto truncate text-[11px] text-slate-500">{lead.email}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-xs text-slate-500">Selected leads can be merged into textarea if needed.</p>
+              <button type="button" onClick={addSelectedLeadsToTextarea} className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-100">
+                Add Selected To Textarea
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mb-1.5"><Users className="inline h-3.5 w-3.5 mr-1 text-slate-400" />To (Recipients) *</label>
+          <textarea value={toEmails} onChange={e => setToEmails(e.target.value)} rows={3} placeholder="john@example.com, jane@company.com or one per line" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-mono resize-none focus:border-violet-400 focus:outline-none" />
+          {recipientCount > 0 && <p className="mt-1 text-xs text-slate-500">{recipientCount} recipient(s) detected</p>}
+        </div>
+
         <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-3">
           <button onClick={() => { setUseTemplate(v => !v); if (useTemplate) handleSelectTemplate(null); }} className={cls('relative flex h-6 w-10 shrink-0 cursor-pointer rounded-full transition-colors', useTemplate ? 'bg-violet-600' : 'bg-slate-200')}><span className={cls('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200', useTemplate ? 'translate-x-4' : 'translate-x-0.5')} /></button>
           <p className="text-sm font-medium text-slate-700">Start from a template</p>
@@ -1608,7 +2389,16 @@ function ManualSendPanel({ allTemplates }: { allTemplates: EmailTemplate[] }) {
           </div>
         )}
         <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Subject *</label><input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="What is this email about?" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm focus:border-violet-400 focus:outline-none" /></div>
-        <div><label className="block text-xs font-semibold text-slate-600 mb-1.5">Message *</label><textarea value={body} onChange={e => setBody(e.target.value)} rows={8} placeholder="Write your email message here..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm leading-relaxed resize-none focus:border-violet-400 focus:outline-none" /></div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mb-1.5">Message *</label>
+          {selectedTemplate?.isHtml ? (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-3.5 py-3 text-xs text-blue-700">
+              This template is rich HTML. It will be sent exactly as designed.
+            </div>
+          ) : (
+            <textarea value={body} onChange={e => setBody(e.target.value)} rows={8} placeholder="Write your email message here..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm leading-relaxed resize-none focus:border-violet-400 focus:outline-none" />
+          )}
+        </div>
         {sendErr && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><AlertCircle className="h-4 w-4 shrink-0 text-red-500" />{sendErr}</div>}
         <button onClick={handleSend} disabled={sending} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 active:scale-95 shadow-sm">
           {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{sending ? 'Sending...' : 'Send Email Now'}

@@ -24,6 +24,10 @@ verify_jwt = false
 verify_jwt = false
 [functions.email-manual-send]
 verify_jwt = false
+[functions.email-manual-schedule]
+verify_jwt = false
+[functions.email-manual-dispatch]
+verify_jwt = false
 [functions.email-oauth-callback]
 verify_jwt = false
 [functions.email-oauth-start]
