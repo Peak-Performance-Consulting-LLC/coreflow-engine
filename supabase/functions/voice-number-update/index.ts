@@ -4,7 +4,7 @@ import {
   findWorkspacePhoneNumberById,
   toWorkspacePhoneNumberView,
   updateWorkspacePhoneNumber,
-} from '../_shared/voice-repository.ts';
+} from '../_shared/voice-number-repository.ts';
 
 function getOptionalLabel(payload: Record<string, unknown>) {
   if (!Object.hasOwn(payload, 'label')) {

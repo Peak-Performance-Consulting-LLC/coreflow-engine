@@ -2,7 +2,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { getSupabaseClient } from '../../lib/supabaseClient';
+import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
@@ -28,6 +28,7 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const projectRef = getConfiguredSupabaseProjectRef();
 
   useEffect(() => {
     const stateEmail = routeState?.prefillEmail;
@@ -85,7 +86,14 @@ export function SignInForm() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in.';
-      toast.error(message);
+      if (message.toLowerCase().includes('invalid login credentials')) {
+        const projectLabel = projectRef ? ` (${projectRef})` : '';
+        toast.error(
+          `Invalid email or password for this Supabase project${projectLabel}. Verify you are signing in to the correct project.`,
+        );
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

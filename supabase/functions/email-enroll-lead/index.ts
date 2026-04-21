@@ -74,6 +74,7 @@ Deno.serve(async (request) => {
         automation_disabled: 'Email automation is disabled for this workspace. Enable it in Email Settings.',
         sender_not_connected: 'No connected email sender found. Add a sender in Email Settings.',
         missing_email: 'This lead has no email address. Add one before enrolling.',
+        suppressed: 'This lead is unsubscribed from workspace emails and cannot be enrolled.',
         no_sequence_steps: 'No active email sequence steps configured. Add steps in Email Settings.',
         already_enrolled: 'This lead is already enrolled in an active email sequence.',
         record_or_workspace_missing: 'Record or workspace data is missing.',

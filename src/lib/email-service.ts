@@ -41,7 +41,7 @@ export const EMAIL_PROVIDERS: EmailProviderMeta[] = [
     logoUrl: '/logos/zoho.webp',
     color: '#E0601A',
     authMethod: 'smtp',
-    smtpDefaults: { host: 'smtp.zoho.com', port: 587 },
+    smtpDefaults: { host: 'smtp.zoho.com', port: 465 },
     description: 'Zoho Mail SMTP',
   },
   {
@@ -113,6 +113,9 @@ export interface EmailAutomationSettings {
   is_enabled: boolean;
   timezone: string;
   stop_on_reply: boolean;
+  send_window_start_hour?: number | null;
+  send_window_end_hour?: number | null;
+  send_window_days?: number[];
 }
 
 export interface AccountSettingsGetResponse {
@@ -195,6 +198,29 @@ export async function enrollLead(
   }>('email-enroll-lead', { body: { record_id: recordId } });
   if (error) throw new Error(error.message);
   if (!data) throw new Error('No response from enroll function.');
+  return data;
+}
+
+export async function controlLeadSequence(
+  workspaceId: string,
+  recordId: string,
+  action: 'stop' | 'pause' | 'resume',
+): Promise<{ followup_id?: string; status: string; reason?: string }> {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.functions.invoke<{
+    followup_id?: string;
+    status: string;
+    reason?: string;
+  }>('email-sequence-control', {
+    body: {
+      workspace_id: workspaceId,
+      record_id: recordId,
+      action,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('No response from sequence control function.');
   return data;
 }
 

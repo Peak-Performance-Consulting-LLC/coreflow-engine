@@ -1,6 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { ensureWorkspaceOwner, authenticateRequest } from '../_shared/server.ts';
-import { listWorkspacePhoneNumbers, toWorkspacePhoneNumberView } from '../_shared/voice-repository.ts';
+import { listWorkspacePhoneNumbers, toWorkspacePhoneNumberView } from '../_shared/voice-number-repository.ts';
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {

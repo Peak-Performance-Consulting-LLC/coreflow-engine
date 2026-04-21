@@ -21,7 +21,7 @@ import {
   updateRecord,
 } from '../lib/crm-service';
 import type { CrmWorkspaceConfig, RecordDetailResponse, RecordSaveInput } from '../lib/crm-types';
-import { enrollLead } from '../lib/email-service';
+import { controlLeadSequence, enrollLead } from '../lib/email-service';
 
 function findStageName(config: CrmWorkspaceConfig, stageId: string | null) {
   for (const pipeline of config.pipelines) {
@@ -56,6 +56,7 @@ export function RecordDetailPage() {
   const [selectedStageId, setSelectedStageId] = useState(detail?.record.stage_id ?? '');
   const [movingStage, setMovingStage] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [sequenceActioning, setSequenceActioning] = useState<null | 'stop' | 'resume'>(null);
 
   const visibleDetail = detail?.record.id === recordId ? detail : null;
 
@@ -198,6 +199,34 @@ export function RecordDetailPage() {
     }
   }
 
+  async function handleStopSequence() {
+    if (!visibleDetail || !workspaceId) return;
+    setSequenceActioning('stop');
+    try {
+      await controlLeadSequence(workspaceId, visibleDetail.record.id, 'stop');
+      toast.success('Email sequence stopped for this lead.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to stop sequence.';
+      toast.error(message);
+    } finally {
+      setSequenceActioning(null);
+    }
+  }
+
+  async function handleResumeSequence() {
+    if (!visibleDetail || !workspaceId) return;
+    setSequenceActioning('resume');
+    try {
+      await controlLeadSequence(workspaceId, visibleDetail.record.id, 'resume');
+      toast.success('Email sequence resumed for this lead.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to resume sequence.';
+      toast.error(message);
+    } finally {
+      setSequenceActioning(null);
+    }
+  }
+
   if (!session || !workspace || !workspaceId) {
     return <FullPageLoader label="Loading record details..." />;
   }
@@ -303,14 +332,34 @@ export function RecordDetailPage() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  loading={enrolling}
-                  onClick={() => void handleEnrollEmail()}
-                >
-                  {enrolling ? 'Enrolling…' : 'Enroll in Sequence'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={enrolling}
+                    onClick={() => void handleEnrollEmail()}
+                  >
+                    {enrolling ? 'Enrolling…' : 'Enroll in Sequence'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    loading={sequenceActioning === 'stop'}
+                    onClick={() => void handleStopSequence()}
+                  >
+                    {sequenceActioning === 'stop' ? 'Stopping…' : 'Stop'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    loading={sequenceActioning === 'resume'}
+                    onClick={() => void handleResumeSequence()}
+                  >
+                    {sequenceActioning === 'resume' ? 'Resuming…' : 'Resume'}
+                  </Button>
+                </div>
               </div>
               <div className="border-t border-slate-100 bg-slate-50 px-6 py-2.5">
                 <p className="text-[11px] text-slate-400">

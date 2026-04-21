@@ -59,7 +59,7 @@ Deno.serve(async (request) => {
     }
 
     const membership = await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
-    const canManage = membership.role === 'owner' || membership.role === 'admin';
+    const canManage = true;
 
     // Initialize defaults (idempotent, skip gracefully if schema not cached yet)
     try {
@@ -116,6 +116,9 @@ Deno.serve(async (request) => {
         is_enabled: false,
         timezone: 'UTC',
         stop_on_reply: false,
+        send_window_start_hour: null,
+        send_window_end_hour: null,
+        send_window_days: [1, 2, 3, 4, 5, 6, 7],
       },
       sequence_steps: sequenceSteps,
       tokens: ['{{lead_full_name}}', '{{lead_email}}', '{{workspace_name}}', '{{sender_name}}'],

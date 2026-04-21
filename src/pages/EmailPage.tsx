@@ -63,6 +63,51 @@ function statusCircle(status: EmailSender['health_status'] | EmailSender['status
   return map[status] ?? 'bg-slate-300';
 }
 
+type ProviderConnectionState = 'connected' | 'attention' | 'disconnected';
+
+function getProviderConnectionState(senders: EmailSender[], provider: (typeof EMAIL_PROVIDERS)[number]): ProviderConnectionState {
+  const providerSenders = senders.filter(
+    (entry) => entry.provider === provider.id && entry.is_active && entry.status !== 'disabled',
+  );
+
+  if (providerSenders.length === 0) {
+    return 'disconnected';
+  }
+
+  const hasHealthyConnectedSender = providerSenders.some(
+    (sender) => sender.status === 'connected' && sender.health_status !== 'failed',
+  );
+
+  if (hasHealthyConnectedSender) {
+    return 'connected';
+  }
+
+  const hasAttentionSender = providerSenders.some(
+    (sender) => sender.health_status === 'failed' || sender.status === 'failed' || sender.status === 'pending',
+  );
+
+  if (hasAttentionSender) {
+    return 'attention';
+  }
+
+  return providerSenders.some((sender) => sender.status === 'connected') ? 'connected' : 'attention';
+}
+
+const ZOHO_REGION_OPTIONS = [
+  { value: 'us', label: 'United States', host: 'smtp.zoho.com' },
+  { value: 'in', label: 'India', host: 'smtp.zoho.in' },
+  { value: 'eu', label: 'Europe', host: 'smtp.zoho.eu' },
+  { value: 'au', label: 'Australia', host: 'smtp.zoho.com.au' },
+] as const;
+
+const SMTP_SECURITY_OPTIONS = [
+  { value: 'tls465', label: 'SSL/TLS (Recommended)', port: 465, useTls: true },
+  { value: 'starttls587', label: 'STARTTLS', port: 587, useTls: true },
+] as const;
+
+type ZohoRegion = (typeof ZOHO_REGION_OPTIONS)[number]['value'];
+type SmtpSecurityMode = (typeof SMTP_SECURITY_OPTIONS)[number]['value'];
+
 /* ─── Tab definition ─────────────────────────────────────────────────── */
 type Tab = 'config' | 'templates' | 'scheduling';
 
@@ -87,15 +132,17 @@ export function EmailPage() {
     navigate('/signin', { replace: true, state: { existingUser: true } });
   }
 
-  return <EmailPageInner workspace={workspace} onSignOut={handleSignOut} />;
+  return <EmailPageInner workspace={workspace} onSignOut={handleSignOut} navigate={navigate} />;
 }
 
 function EmailPageInner({
   workspace,
   onSignOut,
+  navigate,
 }: {
   workspace: WorkspaceSummary;
   onSignOut: () => Promise<void>;
+  navigate: ReturnType<typeof useNavigate>;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('config');
   const [data, setData] = useState<AccountSettingsGetResponse | null>(null);
@@ -134,14 +181,23 @@ function EmailPageInner({
             Configure providers, design templates, and automate follow-up sequences.
           </p>
         </div>
-        <button
-          onClick={reload}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw className={cls('h-3.5 w-3.5', loading && 'animate-spin')} />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate('/email/templates')}
+            className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Templates & Campaigns
+          </button>
+          <button
+            onClick={reload}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={cls('h-3.5 w-3.5', loading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* ── Tabs ── */}
@@ -228,7 +284,7 @@ function ConfigTab({
             <ProviderCard
               key={p.id}
               provider={p}
-              connected={senders.some((s) => s.provider === p.id && s.status === 'connected')}
+              state={getProviderConnectionState(senders, p)}
               onConnect={() => setAddingProvider(p.id)}
             />
           ))}
@@ -273,13 +329,15 @@ function ConfigTab({
 
 function ProviderCard({
   provider,
-  connected,
+  state,
   onConnect,
 }: {
   provider: (typeof EMAIL_PROVIDERS)[number];
-  connected: boolean;
+  state: ProviderConnectionState;
   onConnect: () => void;
 }) {
+  const connected = state === 'connected';
+  const needsAttention = state === 'attention';
   const authBadgeClass =
     provider.authMethod === 'oauth' ? 'bg-blue-50 text-blue-600 ring-blue-100' : 'bg-amber-50 text-amber-600 ring-amber-100';
 
@@ -289,6 +347,8 @@ function ProviderCard({
         'group relative flex h-full flex-col gap-3 rounded-2xl border p-3.5 transition-all duration-200',
         connected
           ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/90 via-white to-white ring-1 ring-emerald-100 shadow-[0_8px_24px_-20px_rgba(16,185,129,0.9)]'
+          : needsAttention
+            ? 'border-red-200 bg-gradient-to-br from-red-50/80 via-white to-white ring-1 ring-red-100'
           : 'border-slate-200 bg-white hover:border-violet-200 hover:shadow-md',
       )}
     >
@@ -316,6 +376,14 @@ function ProviderCard({
             <CheckCircle2 className="h-3.5 w-3.5" />
             Already Connected
           </span>
+        ) : needsAttention ? (
+          <button
+            onClick={onConnect}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 active:scale-95"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Reconnect
+          </button>
         ) : (
           <button
             onClick={onConnect}
@@ -329,6 +397,12 @@ function ProviderCard({
         {connected && (
           <span className="rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700">
             Active
+          </span>
+        )}
+
+        {needsAttention && (
+          <span className="rounded-lg border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-700">
+            Needs Attention
           </span>
         )}
 
@@ -435,6 +509,7 @@ function SmtpDrawer({
 }) {
   const provider = EMAIL_PROVIDERS.find((p) => p.id === providerId)!;
   const isOAuth = provider.authMethod === 'oauth';
+  const isZoho = providerId === 'zoho';
 
   const [form, setForm] = useState({
     sender_email: '',
@@ -446,12 +521,33 @@ function SmtpDrawer({
     smtp_use_tls: true,
     make_default: false,
   });
+  const [zohoRegion, setZohoRegion] = useState<ZohoRegion>(() => {
+    const matchedRegion = ZOHO_REGION_OPTIONS.find((option) => option.host === provider.smtpDefaults?.host);
+    return matchedRegion?.value ?? 'us';
+  });
+  const [smtpSecurityMode, setSmtpSecurityMode] = useState<SmtpSecurityMode>(() => {
+    return (provider.smtpDefaults?.port ?? 465) === 587 ? 'starttls587' : 'tls465';
+  });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   function field(name: keyof typeof form, value: string | number | boolean) {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
+
+  useEffect(() => {
+    if (!isZoho) return;
+
+    const region = ZOHO_REGION_OPTIONS.find((option) => option.value === zohoRegion) ?? ZOHO_REGION_OPTIONS[0];
+    const mode = SMTP_SECURITY_OPTIONS.find((option) => option.value === smtpSecurityMode) ?? SMTP_SECURITY_OPTIONS[0];
+
+    setForm((prev) => ({
+      ...prev,
+      smtp_host: region.host,
+      smtp_port: mode.port,
+      smtp_use_tls: mode.useTls,
+    }));
+  }, [isZoho, smtpSecurityMode, zohoRegion]);
 
   async function handleSave() {
     setSaving(true);
@@ -487,6 +583,8 @@ function SmtpDrawer({
       setSaving(false);
     }
   }
+
+  const senderMatchesAuthEmail = form.sender_email.trim().toLowerCase() === form.smtp_username.trim().toLowerCase();
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
@@ -528,6 +626,38 @@ function SmtpDrawer({
 
               {/* fields */}
               <div className="space-y-3">
+                {isZoho && (
+                  <>
+                    <FormField label="Zoho Region" required>
+                      <select
+                        value={zohoRegion}
+                        onChange={(e) => setZohoRegion(e.target.value as ZohoRegion)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                      >
+                        {ZOHO_REGION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label} ({option.host})
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+
+                    <FormField label="Security Mode" required>
+                      <select
+                        value={smtpSecurityMode}
+                        onChange={(e) => setSmtpSecurityMode(e.target.value as SmtpSecurityMode)}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                      >
+                        {SMTP_SECURITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label} (Port {option.port})
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  </>
+                )}
+
                 <FormField label="Sender Email" required>
                   <input
                     type="email"
@@ -554,6 +684,7 @@ function SmtpDrawer({
                         value={form.smtp_host}
                         onChange={(e) => field('smtp_host', e.target.value)}
                         placeholder="smtp.example.com"
+                        readOnly={isZoho}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm placeholder-slate-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
                       />
                     </FormField>
@@ -563,6 +694,7 @@ function SmtpDrawer({
                       type="number"
                       value={form.smtp_port}
                       onChange={(e) => field('smtp_port', parseInt(e.target.value, 10) || 587)}
+                      readOnly={isZoho}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
                     />
                   </FormField>
@@ -585,15 +717,26 @@ function SmtpDrawer({
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm placeholder-slate-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   />
                 </FormField>
-                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-700 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.smtp_use_tls}
-                    onChange={(e) => field('smtp_use_tls', e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                  />
-                  Use TLS / STARTTLS
-                </label>
+                {isZoho ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Connection will use {smtpSecurityMode === 'tls465' ? 'TLS on port 465' : 'STARTTLS on port 587'}.
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2.5 text-sm font-medium text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.smtp_use_tls}
+                      onChange={(e) => field('smtp_use_tls', e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    Use TLS / STARTTLS
+                  </label>
+                )}
+                {isZoho && form.sender_email && form.smtp_username && !senderMatchesAuthEmail && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Sender Email should match the authenticated Zoho mailbox or a verified Zoho alias.
+                  </div>
+                )}
                 <label className="flex items-center gap-2.5 text-sm font-medium text-slate-700 cursor-pointer select-none">
                   <input
                     type="checkbox"

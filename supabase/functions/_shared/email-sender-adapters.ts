@@ -1,6 +1,6 @@
 import type { EdgeClient } from './server.ts';
 import { decryptSecret, encryptSecret } from './email-crypto.ts';
-import type { WorkspaceEmailSenderRow } from './email-automation.ts';
+import { canSenderAttemptDelivery, type WorkspaceEmailSenderRow } from './email-automation.ts';
 
 interface SendEmailParams {
   db: EdgeClient;
@@ -8,6 +8,7 @@ interface SendEmailParams {
   toEmail: string;
   subject: string;
   bodyText: string;
+  bodyHtml?: string | null;
   fromName?: string | null;
   fromEmail?: string | null;
 }
@@ -17,6 +18,14 @@ interface SendEmailResult {
   rawResponseMeta: Record<string, unknown>;
 }
 
+interface LegacyAsyncWriter {
+  write(data: Uint8Array): Promise<number>;
+}
+
+interface LegacySyncWriter {
+  writeSync(data: Uint8Array): number;
+}
+
 const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 const MICROSOFT_SCOPE = 'offline_access https://graph.microsoft.com/Mail.Send';
 
@@ -24,9 +33,57 @@ function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function ensureLegacyDenoWriteAllPolyfill() {
+  const denoCompat = Deno as unknown as {
+    writeAll?: (writer: LegacyAsyncWriter, data: Uint8Array) => Promise<void>;
+    writeAllSync?: (writer: LegacySyncWriter, data: Uint8Array) => void;
+  };
+
+  if (typeof denoCompat.writeAll !== 'function') {
+    denoCompat.writeAll = async (writer: LegacyAsyncWriter, data: Uint8Array) => {
+      let offset = 0;
+      while (offset < data.length) {
+        const written = await writer.write(data.subarray(offset));
+        if (!Number.isFinite(written) || written <= 0) {
+          throw new Error('Legacy writeAll polyfill failed to make write progress.');
+        }
+        offset += written;
+      }
+    };
+  }
+
+  if (typeof denoCompat.writeAllSync !== 'function') {
+    denoCompat.writeAllSync = (writer: LegacySyncWriter, data: Uint8Array) => {
+      let offset = 0;
+      while (offset < data.length) {
+        const written = writer.writeSync(data.subarray(offset));
+        if (!Number.isFinite(written) || written <= 0) {
+          throw new Error('Legacy writeAllSync polyfill failed to make write progress.');
+        }
+        offset += written;
+      }
+    };
+  }
+}
+
 function base64UrlEncode(value: Uint8Array) {
   const base64 = btoa(String.fromCharCode(...value));
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildRfc822Message(params: {
@@ -35,17 +92,36 @@ function buildRfc822Message(params: {
   toEmail: string;
   subject: string;
   bodyText: string;
+  bodyHtml?: string | null;
 }) {
   const fromLabel = params.fromName ? `${params.fromName} <${params.fromEmail}>` : params.fromEmail;
-  const lines = [
-    `From: ${fromLabel}`,
-    `To: ${params.toEmail}`,
-    `Subject: ${params.subject}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    params.bodyText,
-  ];
+  const bodyHtml = normalizeString(params.bodyHtml);
+  const fallbackBodyText = normalizeString(params.bodyText) || (bodyHtml ? stripHtml(bodyHtml) : '');
+
+  const lines = [`From: ${fromLabel}`, `To: ${params.toEmail}`, `Subject: ${params.subject}`, 'MIME-Version: 1.0'];
+
+  if (bodyHtml) {
+    const boundary = `CoreFlowBoundary${crypto.randomUUID().replace(/-/g, '')}`;
+    lines.push(
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      fallbackBodyText,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      bodyHtml,
+      '',
+      `--${boundary}--`,
+    );
+  } else {
+    lines.push('Content-Type: text/plain; charset=UTF-8', '', fallbackBodyText);
+  }
 
   return lines.join('\r\n');
 }
@@ -218,15 +294,23 @@ async function markSenderHealth(
   status: 'healthy' | 'degraded' | 'failed',
   errorText: string | null,
 ) {
+  const patch: Record<string, unknown> = {
+    health_status: status,
+    last_health_error: errorText,
+    last_used_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (status === 'healthy') {
+    // Successful sends should re-mark sender as connected.
+    patch.status = 'connected';
+  } else if (status === 'failed') {
+    patch.status = 'failed';
+  }
+
   const { error } = await db
     .from('workspace_email_senders')
-    .update({
-      health_status: status,
-      last_health_error: errorText,
-      last_used_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...(status === 'failed' ? { status: 'failed' } : {}),
-    })
+    .update(patch)
     .eq('id', sender.id)
     .eq('workspace_id', sender.workspace_id);
 
@@ -248,6 +332,7 @@ async function sendGoogleEmail(params: SendEmailParams): Promise<SendEmailResult
         toEmail: params.toEmail,
         subject: params.subject,
         bodyText: params.bodyText,
+        bodyHtml: params.bodyHtml,
       }),
     ),
   );
@@ -289,8 +374,8 @@ async function sendMicrosoftEmail(params: SendEmailParams): Promise<SendEmailRes
       message: {
         subject: params.subject,
         body: {
-          contentType: 'Text',
-          content: params.bodyText,
+          contentType: normalizeString(params.bodyHtml) ? 'HTML' : 'Text',
+          content: normalizeString(params.bodyHtml) || params.bodyText,
         },
         toRecipients: [
           {
@@ -326,6 +411,8 @@ async function sendMicrosoftEmail(params: SendEmailParams): Promise<SendEmailRes
 }
 
 async function sendSmtpEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  ensureLegacyDenoWriteAllPolyfill();
+
   const host = normalizeString(params.sender.smtp_host);
   const port = Number(params.sender.smtp_port ?? 0);
   const username = normalizeString(params.sender.smtp_username);
@@ -340,53 +427,81 @@ async function sendSmtpEmail(params: SendEmailParams): Promise<SendEmailResult> 
   const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
   const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts');
-  const client = new SmtpClient();
+  const connectionAttempts: Array<{ mode: 'tls' | 'plain'; port: number }> = [];
 
-  try {
-    if (params.sender.smtp_use_tls) {
-      await client.connectTLS({
-        hostname: host,
-        port,
-        username,
-        password,
-      });
-    } else {
-      await client.connect({
-        hostname: host,
-        port,
-        username,
-        password,
-      });
+  if (params.sender.smtp_use_tls) {
+    connectionAttempts.push({ mode: 'tls', port });
+    // Port 587 often negotiates STARTTLS after plain connect.
+    if (port === 587) {
+      connectionAttempts.push({ mode: 'plain', port: 587 });
     }
-
-    await client.send({
-      from,
-      to: params.toEmail,
-      subject: params.subject,
-      content: params.bodyText,
-    });
-  } finally {
-    await client.close();
+    // Zoho and many SMTP providers commonly use implicit TLS on 465.
+    if (port === 587) {
+      connectionAttempts.push({ mode: 'tls', port: 465 });
+    }
+  } else {
+    connectionAttempts.push({ mode: 'plain', port });
   }
 
-  return {
-    providerMessageId: crypto.randomUUID(),
-    rawResponseMeta: {
-      host,
-      port,
-      tls: params.sender.smtp_use_tls,
-      provider: 'smtp',
-    },
-  };
+  let lastErrorText = 'Unknown SMTP failure.';
+  for (const attempt of connectionAttempts) {
+    const client = new SmtpClient();
+    try {
+      if (attempt.mode === 'tls') {
+        await client.connectTLS({
+          hostname: host,
+          port: attempt.port,
+          username,
+          password,
+        });
+      } else {
+        await client.connect({
+          hostname: host,
+          port: attempt.port,
+          username,
+          password,
+        });
+      }
+
+      await client.send({
+        from,
+        to: params.toEmail,
+        subject: params.subject,
+        content: params.bodyText,
+        html: normalizeString(params.bodyHtml) || undefined,
+      });
+      await client.close();
+
+      return {
+        providerMessageId: crypto.randomUUID(),
+        rawResponseMeta: {
+          host,
+          port: attempt.port,
+          tls: attempt.mode === 'tls',
+          provider: 'smtp',
+          configured_port: port,
+          configured_tls: params.sender.smtp_use_tls,
+          fallback_used: attempt.port !== port || ((attempt.mode === 'tls') !== params.sender.smtp_use_tls),
+        },
+      };
+    } catch (error) {
+      lastErrorText = error instanceof Error ? error.message : 'Unable to send via SMTP.';
+      try {
+        await client.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  throw new Error(
+    `SMTP send failed for ${host}. Last error: ${lastErrorText}`,
+  );
 }
 
 export async function sendEmailWithSender(params: SendEmailParams): Promise<SendEmailResult> {
-  if (!params.sender.is_active) {
-    throw new Error('Sender is inactive.');
-  }
-
-  if (params.sender.status !== 'connected') {
-    throw new Error(`Sender is not connected (status: ${params.sender.status}).`);
+  if (!canSenderAttemptDelivery(params.sender)) {
+    throw new Error(`Sender is not available for delivery (status: ${params.sender.status}).`);
   }
 
   try {

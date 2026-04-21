@@ -23,3 +23,17 @@ export function getSupabaseClient() {
 
   return supabase;
 }
+
+export function getConfiguredSupabaseProjectRef(): string | null {
+  if (!supabaseUrl) {
+    return null;
+  }
+
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    const [projectRef] = host.split('.');
+    return projectRef || null;
+  } catch {
+    return null;
+  }
+}

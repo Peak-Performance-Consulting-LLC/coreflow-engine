@@ -16,7 +16,7 @@ import {
   saveWorkspacePhoneNumber,
   toWorkspacePhoneNumberView,
   type WorkspacePhoneNumberRow,
-} from '../_shared/voice-repository.ts';
+} from '../_shared/voice-number-repository.ts';
 
 function normalizeLabel(value: unknown) {
   return typeof value === 'string' ? value.trim() : null;

@@ -1,4 +1,5 @@
 import {
+  canSenderAttemptDelivery,
   claimDueFollowupSteps,
   getFollowupById,
   getFollowupStepRecipient,
@@ -7,6 +8,7 @@ import {
   logEmailDeliveryEvent,
   markFollowupStatus,
   resolveRetryDelayMinutes,
+  isWorkspaceEmailSuppressed,
   updateFollowupStepStatus,
   type WorkspaceEmailSenderRow,
 } from '../_shared/email-automation.ts';
@@ -17,6 +19,39 @@ import { sendEmailWithSender } from '../_shared/email-sender-adapters.ts';
 
 function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function looksLikeHtml(value: string) {
+  return /<\/?[a-z][\s\S]*>/i.test(value);
+}
+
+function plainTextToHtml(value: string) {
+  const escaped = escapeHtml(value || '');
+  return `<div>${escaped.replace(/\n/g, '<br/>')}</div>`;
 }
 
 function getCronSecret(request: Request) {
@@ -31,11 +66,13 @@ async function resolveSender(
   const senders = await listWorkspaceEmailSenders(db, workspaceId);
 
   if (senderId) {
-    return senders.find((sender) => sender.id === senderId) ?? null;
+    return senders.find((sender) => sender.id === senderId && canSenderAttemptDelivery(sender)) ?? null;
   }
 
-  return senders.find((sender) => sender.is_default && sender.is_active && sender.status === 'connected') ??
-    senders.find((sender) => sender.is_active && sender.status === 'connected') ??
+  return senders.find((sender) => sender.is_default && sender.status === 'connected' && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => sender.status === 'connected' && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => sender.is_default && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => canSenderAttemptDelivery(sender)) ??
     null;
 }
 
@@ -103,6 +140,39 @@ async function handleMissingRecipient(
   });
 }
 
+async function handleSuppressedRecipient(
+  db: EdgeClient,
+  params: {
+    workspaceId: string;
+    followupId: string;
+    followupStepId: string;
+    recipientEmail: string;
+  },
+) {
+  await updateFollowupStepStatus(db, {
+    workspaceId: params.workspaceId,
+    followupStepId: params.followupStepId,
+    status: 'canceled',
+    clearLock: true,
+    lastError: 'Recipient is globally unsubscribed for this workspace.',
+  });
+
+  await markFollowupStatus(db, {
+    workspaceId: params.workspaceId,
+    followupId: params.followupId,
+    status: 'stopped',
+    reason: 'suppressed_unsubscribed',
+  });
+
+  await logEmailDeliveryEvent(db, {
+    workspaceId: params.workspaceId,
+    followupId: params.followupId,
+    followupStepId: params.followupStepId,
+    eventType: 'suppressed',
+    errorText: `Suppressed recipient: ${params.recipientEmail}`,
+  });
+}
+
 async function processStep(
   db: EdgeClient,
   step: {
@@ -153,6 +223,19 @@ async function processStep(
     return { status: 'failed' as const, reason: 'missing_recipient' as const };
   }
 
+  const isSuppressed = await isWorkspaceEmailSuppressed(db, step.workspace_id, recipient.recipientEmail);
+
+  if (isSuppressed) {
+    await handleSuppressedRecipient(db, {
+      workspaceId: step.workspace_id,
+      followupId: step.followup_id,
+      followupStepId: step.id,
+      recipientEmail: recipient.recipientEmail,
+    });
+
+    return { status: 'skipped' as const, reason: 'suppressed' as const };
+  }
+
   const nextAttempt = step.attempt_count + 1;
 
   await updateFollowupStepStatus(db, {
@@ -178,12 +261,18 @@ async function processStep(
   });
 
   try {
+    const renderedBody = normalizeString(step.body_rendered);
+    const bodyLooksHtml = looksLikeHtml(renderedBody);
+    const bodyHtml = bodyLooksHtml ? renderedBody : plainTextToHtml(renderedBody);
+    const bodyText = bodyLooksHtml ? stripHtml(renderedBody) : renderedBody;
+
     const result = await sendEmailWithSender({
       db,
       sender,
       toEmail: recipient.recipientEmail,
       subject: step.subject_rendered,
-      bodyText: step.body_rendered,
+      bodyText,
+      bodyHtml,
       fromName: sender.sender_name,
       fromEmail: sender.sender_email,
     });

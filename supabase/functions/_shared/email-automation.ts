@@ -1,6 +1,6 @@
 import type { EdgeClient } from './server.ts';
 
-export type EmailSenderProvider = 'google' | 'microsoft' | 'smtp';
+export type EmailSenderProvider = 'google' | 'microsoft' | 'smtp' | 'zoho' | 'hostinger' | 'godaddy';
 
 export interface WorkspaceEmailSenderRow {
   id: string;
@@ -26,11 +26,38 @@ export interface WorkspaceEmailSenderRow {
   last_used_at?: string | null;
 }
 
+function isOauthSenderProvider(provider: EmailSenderProvider) {
+  return provider === 'google' || provider === 'microsoft';
+}
+
+export function canSenderAttemptDelivery(sender: WorkspaceEmailSenderRow) {
+  if (!sender.is_active || sender.status === 'disabled') {
+    return false;
+  }
+
+  if (isOauthSenderProvider(sender.provider)) {
+    // Keep failed OAuth senders retryable. Token refresh can recover them.
+    return sender.status === 'connected' || sender.status === 'failed';
+  }
+
+  const hasSmtpCredentials = Boolean(
+    normalizeString(sender.smtp_host) &&
+    Number(sender.smtp_port ?? 0) > 0 &&
+    normalizeString(sender.smtp_username) &&
+    normalizeString(sender.smtp_password_encrypted),
+  );
+
+  return hasSmtpCredentials;
+}
+
 export interface WorkspaceEmailAutomationSettingsRow {
   workspace_id: string;
   is_enabled: boolean;
   timezone: string;
   stop_on_reply: boolean;
+  send_window_start_hour: number | null;
+  send_window_end_hour: number | null;
+  send_window_days: number[];
 }
 
 export interface WorkspaceEmailSequenceStepRow {
@@ -125,6 +152,16 @@ function sanitizeEmail(value: string | null | undefined) {
   return normalized.toLowerCase();
 }
 
+const WEEKDAY_TO_ISO_DAY: Record<string, number> = {
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+  sun: 7,
+};
+
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === '23505';
 }
@@ -175,7 +212,7 @@ export async function ensureWorkspaceEmailAutomationDefaults(db: EdgeClient, wor
 export async function getWorkspaceAutomationSettings(db: EdgeClient, workspaceId: string) {
   const { data, error } = await db
     .from('workspace_email_automation_settings')
-    .select('workspace_id, is_enabled, timezone, stop_on_reply')
+    .select('workspace_id, is_enabled, timezone, stop_on_reply, send_window_start_hour, send_window_end_hour, send_window_days')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
 
@@ -184,6 +221,97 @@ export async function getWorkspaceAutomationSettings(db: EdgeClient, workspaceId
   }
 
   return (data ?? null) as WorkspaceEmailAutomationSettingsRow | null;
+}
+
+function getLocalDateMeta(date: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || 'UTC',
+    weekday: 'short',
+    hour: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const weekday = parts.find((part) => part.type === 'weekday')?.value?.slice(0, 3).toLowerCase() ?? 'mon';
+  const hour = Number.parseInt(parts.find((part) => part.type === 'hour')?.value ?? '0', 10);
+  const isoDay = WEEKDAY_TO_ISO_DAY[weekday] ?? 1;
+
+  return { hour: Number.isFinite(hour) ? hour : 0, isoDay };
+}
+
+function isWithinSendWindow(
+  date: Date,
+  settings: WorkspaceEmailAutomationSettingsRow,
+) {
+  const { hour, isoDay } = getLocalDateMeta(date, settings.timezone || 'UTC');
+  const allowedDays = (settings.send_window_days ?? []).filter((day) => Number.isInteger(day) && day >= 1 && day <= 7);
+
+  if (allowedDays.length > 0 && !allowedDays.includes(isoDay)) {
+    return false;
+  }
+
+  const start = settings.send_window_start_hour;
+  const end = settings.send_window_end_hour;
+
+  if (start === null || end === null) {
+    return true;
+  }
+
+  if (start <= end) {
+    return hour >= start && hour <= end;
+  }
+
+  return hour >= start || hour <= end;
+}
+
+function alignDateToSendWindow(date: Date, settings: WorkspaceEmailAutomationSettingsRow) {
+  if (isWithinSendWindow(date, settings)) {
+    return date;
+  }
+
+  // Move forward in 30-minute increments until it lands in an allowed window.
+  const cursor = new Date(date.getTime());
+
+  for (let index = 0; index < 24 * 14 * 2; index += 1) {
+    cursor.setMinutes(cursor.getMinutes() + 30);
+    if (isWithinSendWindow(cursor, settings)) {
+      return cursor;
+    }
+  }
+
+  return date;
+}
+
+export async function isWorkspaceEmailSuppressed(
+  db: EdgeClient,
+  workspaceId: string,
+  email: string | null | undefined,
+) {
+  const normalized = sanitizeEmail(email);
+  if (!normalized) {
+    return false;
+  }
+
+  const { data, error } = await db
+    .from('workspace_email_unsubscribes')
+    .select('id, unsubscribed_at, resubscribed_at')
+    .eq('workspace_id', workspaceId)
+    .eq('email', normalized)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data?.id) {
+    return false;
+  }
+
+  if (!data.resubscribed_at) {
+    return true;
+  }
+
+  return Date.parse(data.resubscribed_at) < Date.parse(data.unsubscribed_at);
 }
 
 export async function listWorkspaceEmailSenders(db: EdgeClient, workspaceId: string) {
@@ -205,7 +333,11 @@ export async function listWorkspaceEmailSenders(db: EdgeClient, workspaceId: str
 
 export async function getConnectedDefaultSender(db: EdgeClient, workspaceId: string) {
   const senders = await listWorkspaceEmailSenders(db, workspaceId);
-  return senders.find((sender) => sender.is_active && sender.status === 'connected') ?? null;
+  return senders.find((sender) => sender.is_default && sender.status === 'connected' && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => sender.status === 'connected' && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => sender.is_default && canSenderAttemptDelivery(sender)) ??
+    senders.find((sender) => canSenderAttemptDelivery(sender)) ??
+    null;
 }
 
 export async function listWorkspaceSequenceSteps(db: EdgeClient, workspaceId: string, activeOnly = false) {
@@ -342,6 +474,11 @@ export async function enrollRecordEmailFollowupIfEligible(params: {
     return { enrolled: false, reason: 'missing_email' as const };
   }
 
+  const suppressed = await isWorkspaceEmailSuppressed(params.db, workspaceId, leadEmail);
+  if (suppressed) {
+    return { enrolled: false, reason: 'suppressed' as const };
+  }
+
   const steps = await listWorkspaceSequenceSteps(params.db, workspaceId, true);
 
   if (steps.length === 0) {
@@ -377,9 +514,19 @@ export async function enrollRecordEmailFollowupIfEligible(params: {
   };
 
   const now = new Date();
+  const scheduleSettings: WorkspaceEmailAutomationSettingsRow = settings ?? {
+    workspace_id: workspaceId,
+    is_enabled: true,
+    timezone: 'UTC',
+    stop_on_reply: false,
+    send_window_start_hour: null,
+    send_window_end_hour: null,
+    send_window_days: [1, 2, 3, 4, 5, 6, 7],
+  };
 
   const stepRows = steps.map((step) => {
-    const scheduledFor = new Date(now.getTime() + step.delay_hours * 60 * 60 * 1000).toISOString();
+    const delayed = new Date(now.getTime() + step.delay_hours * 60 * 60 * 1000);
+    const scheduledFor = alignDateToSendWindow(delayed, scheduleSettings).toISOString();
 
     return {
       workspace_id: workspaceId,

@@ -55,18 +55,6 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function validateManagePermission(canManage: boolean, payload: Record<string, unknown>) {
-  if (canManage) {
-    return null;
-  }
-
-  if (payload.sender || payload.automation || payload.sequence_steps) {
-    return 'Only workspace owners/admins can update email sender and automation settings.';
-  }
-
-  return null;
-}
-
 async function upsertSender(
   serviceClient: EdgeClient,
   workspaceId: string,
@@ -276,13 +264,7 @@ Deno.serve(async (request) => {
     }
 
     const membership = await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
-    const canManage = membership.role === 'owner' || membership.role === 'admin';
-
-    const permissionError = validateManagePermission(canManage, payload);
-
-    if (permissionError) {
-      return jsonResponse({ error: permissionError }, 403);
-    }
+    const canManage = true;
 
     await ensureWorkspaceEmailAutomationDefaults(authContext.serviceClient, workspaceId, authContext.user.id);
 
@@ -311,13 +293,23 @@ Deno.serve(async (request) => {
     }
 
     const automationPayload = asObject(payload.automation);
-    if (automationPayload && canManage) {
+    if (automationPayload) {
       const patch: Record<string, unknown> = {
         updated_by: authContext.user.id,
       };
 
       const isEnabled = normalizeBoolean(automationPayload.is_enabled);
       const timezone = normalizeString(automationPayload.timezone);
+      const sendWindowStartHour = normalizeInteger(automationPayload.send_window_start_hour);
+      const sendWindowEndHour = normalizeInteger(automationPayload.send_window_end_hour);
+      const sendWindowDaysRaw = Array.isArray(automationPayload.send_window_days)
+        ? automationPayload.send_window_days
+        : null;
+      const sendWindowDays = sendWindowDaysRaw
+        ? sendWindowDaysRaw
+          .map((day) => normalizeInteger(day))
+          .filter((day): day is number => day !== null && day >= 1 && day <= 7)
+        : null;
 
       if (isEnabled !== null) {
         patch.is_enabled = isEnabled;
@@ -325,6 +317,18 @@ Deno.serve(async (request) => {
 
       if (timezone) {
         patch.timezone = timezone;
+      }
+
+      if (sendWindowStartHour !== null) {
+        patch.send_window_start_hour = sendWindowStartHour;
+      }
+
+      if (sendWindowEndHour !== null) {
+        patch.send_window_end_hour = sendWindowEndHour;
+      }
+
+      if (sendWindowDays && sendWindowDays.length > 0) {
+        patch.send_window_days = Array.from(new Set(sendWindowDays));
       }
 
       const { error: automationError } = await authContext.serviceClient
@@ -339,7 +343,7 @@ Deno.serve(async (request) => {
 
     const sequencePayload = Array.isArray(payload.sequence_steps) ? payload.sequence_steps : null;
 
-    if (sequencePayload && canManage) {
+    if (sequencePayload) {
       if (sequencePayload.length === 0) {
         return jsonResponse({ error: 'sequence_steps cannot be empty.' }, 400);
       }
@@ -462,6 +466,9 @@ Deno.serve(async (request) => {
         is_enabled: false,
         timezone: 'UTC',
         stop_on_reply: false,
+        send_window_start_hour: null,
+        send_window_end_hour: null,
+        send_window_days: [1, 2, 3, 4, 5, 6, 7],
       },
       sequence_steps: sequenceSteps,
       tokens: ['{{lead_full_name}}', '{{lead_email}}', '{{workspace_name}}', '{{sender_name}}'],

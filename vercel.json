@@ -1,17 +1,15 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/cron/email-followup-dispatch",
       "schedule": "* * * * *"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/.*",
-      "dest": "/index.html"
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }

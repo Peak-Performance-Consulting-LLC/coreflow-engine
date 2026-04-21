@@ -72,11 +72,7 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'provider must be google or microsoft.' }, 400);
     }
 
-    const membership = await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
-
-    if (membership.role !== 'owner' && membership.role !== 'admin') {
-      return jsonResponse({ error: 'Only workspace owners/admins can connect email providers.' }, 403);
-    }
+    await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
 
     const callbackUrl = resolveCallbackUrl();
     const codeVerifier = randomBase64Url(64);

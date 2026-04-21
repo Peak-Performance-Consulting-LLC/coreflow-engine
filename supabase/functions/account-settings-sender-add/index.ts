@@ -21,14 +21,144 @@ interface SenderAddBody {
   make_default?: boolean;
 }
 
-async function testSmtpConnectivity(host: string, port: number): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const conn = await Deno.connect({ hostname: host, port, transport: 'tcp' });
-    conn.close();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Connection failed.' };
+interface LegacyAsyncWriter {
+  write(data: Uint8Array): Promise<number>;
+}
+
+interface LegacySyncWriter {
+  writeSync(data: Uint8Array): number;
+}
+
+type SmtpConnectionMode = 'tls' | 'plain';
+interface SmtpConnectionAttempt {
+  mode: SmtpConnectionMode;
+  port: number;
+}
+
+function ensureLegacyDenoWriteAllPolyfill() {
+  const denoCompat = Deno as unknown as {
+    writeAll?: (writer: LegacyAsyncWriter, data: Uint8Array) => Promise<void>;
+    writeAllSync?: (writer: LegacySyncWriter, data: Uint8Array) => void;
+  };
+
+  if (typeof denoCompat.writeAll !== 'function') {
+    denoCompat.writeAll = async (writer: LegacyAsyncWriter, data: Uint8Array) => {
+      let offset = 0;
+      while (offset < data.length) {
+        const written = await writer.write(data.subarray(offset));
+        if (!Number.isFinite(written) || written <= 0) {
+          throw new Error('Legacy writeAll polyfill failed to make write progress.');
+        }
+        offset += written;
+      }
+    };
   }
+
+  if (typeof denoCompat.writeAllSync !== 'function') {
+    denoCompat.writeAllSync = (writer: LegacySyncWriter, data: Uint8Array) => {
+      let offset = 0;
+      while (offset < data.length) {
+        const written = writer.writeSync(data.subarray(offset));
+        if (!Number.isFinite(written) || written <= 0) {
+          throw new Error('Legacy writeAllSync polyfill failed to make write progress.');
+        }
+        offset += written;
+      }
+    };
+  }
+}
+
+function resolveSmtpConnectionAttempts(port: number, useTls: boolean): SmtpConnectionAttempt[] {
+  const attempts: SmtpConnectionAttempt[] = [];
+  const normalizedPort = Number.isFinite(port) && port > 0 ? port : 587;
+
+  if (useTls) {
+    attempts.push({ mode: 'tls', port: normalizedPort });
+    if (normalizedPort === 587) {
+      attempts.push({ mode: 'plain', port: 587 });
+      attempts.push({ mode: 'tls', port: 465 });
+    }
+  } else {
+    attempts.push({ mode: 'plain', port: normalizedPort });
+    if (normalizedPort === 587) {
+      attempts.push({ mode: 'tls', port: 465 });
+    }
+  }
+
+  return attempts;
+}
+
+async function testSmtpAuthentication(params: {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  useTls: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  ensureLegacyDenoWriteAllPolyfill();
+
+  const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts');
+  const attempts = resolveSmtpConnectionAttempts(params.port, params.useTls);
+  let lastError = 'SMTP authentication failed.';
+
+  for (const attempt of attempts) {
+    const client = new SmtpClient();
+    try {
+      if (attempt.mode === 'tls') {
+        await client.connectTLS({
+          hostname: params.host,
+          port: attempt.port,
+          username: params.username,
+          password: params.password,
+        });
+      } else {
+        await client.connect({
+          hostname: params.host,
+          port: attempt.port,
+          username: params.username,
+          password: params.password,
+        });
+      }
+
+      await client.close();
+      return { ok: true };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'SMTP authentication failed.';
+      try {
+        await client.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  return { ok: false, error: lastError };
+}
+
+function buildSmtpAuthFailureMessage(params: {
+  provider: EmailProvider;
+  host: string;
+  port: number;
+  senderEmail: string;
+  smtpUsername: string;
+  smtpError: string;
+}) {
+  const hints: string[] = [];
+
+  if (params.provider === 'zoho') {
+    hints.push(
+      'Use your Zoho app password.',
+      'Choose the correct Zoho SMTP host for your region: US smtp.zoho.com, India smtp.zoho.in, Europe smtp.zoho.eu, Australia smtp.zoho.com.au.',
+      'Use port 465 (TLS, recommended) or 587 (STARTTLS).',
+    );
+
+    if (params.senderEmail.toLowerCase() !== params.smtpUsername.toLowerCase()) {
+      hints.push('sender_email should match the authenticated mailbox or a verified Zoho alias.');
+    }
+  }
+
+  const hintText = hints.length > 0 ? ` ${hints.join(' ')}` : '';
+  return `Unable to authenticate with ${params.host}:${params.port}. ${params.smtpError}.${hintText}`;
 }
 
 Deno.serve(async (request) => {
@@ -53,19 +183,15 @@ Deno.serve(async (request) => {
         .from('workspace_members')
         .select('workspace_id, role')
         .eq('user_id', authContext.user.id)
-        .in('role', ['owner', 'admin'])
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
       if (memberError) return jsonResponse({ error: memberError.message }, 500);
-      if (!memberRow) return jsonResponse({ error: 'Only workspace owners or admins can add email senders.' }, 403);
+      if (!memberRow) return jsonResponse({ error: 'No workspace found for this user.' }, 404);
       resolvedWorkspaceId = memberRow.workspace_id;
     } else {
-      const membership = await ensureWorkspaceMembership(authContext.serviceClient, resolvedWorkspaceId, authContext.user.id);
-      if (membership.role !== 'owner' && membership.role !== 'admin') {
-        return jsonResponse({ error: 'Only workspace owners or admins can add email senders.' }, 403);
-      }
+      await ensureWorkspaceMembership(authContext.serviceClient, resolvedWorkspaceId, authContext.user.id);
     }
 
     const body = payload as SenderAddBody;
@@ -84,18 +210,36 @@ Deno.serve(async (request) => {
       const smtpHost = normalizeString(body.smtp_host);
       const smtpUsername = normalizeString(body.smtp_username);
       const smtpPassword = normalizeString(body.smtp_password);
+      const smtpUseTls = typeof body.smtp_use_tls === 'boolean' ? body.smtp_use_tls : true;
 
       if (!smtpHost) return jsonResponse({ error: 'smtp_host is required for SMTP providers.' }, 400);
       if (!smtpUsername) return jsonResponse({ error: 'smtp_username is required.' }, 400);
       if (!smtpPassword) return jsonResponse({ error: 'smtp_password is required.' }, 400);
 
       const smtpPort = Number(body.smtp_port ?? 587);
+      if (!Number.isFinite(smtpPort) || smtpPort <= 0) {
+        return jsonResponse({ error: 'smtp_port must be a valid positive number.' }, 400);
+      }
 
-      // Test connectivity
-      const connectivity = await testSmtpConnectivity(smtpHost, smtpPort);
-      if (!connectivity.ok) {
+      const authResult = await testSmtpAuthentication({
+        host: smtpHost,
+        port: smtpPort,
+        username: smtpUsername,
+        password: smtpPassword,
+        useTls: smtpUseTls,
+      });
+      if (!authResult.ok) {
         return jsonResponse(
-          { error: `Cannot reach ${smtpHost}:${smtpPort}. Check your SMTP host and port. (${connectivity.error})` },
+          {
+            error: buildSmtpAuthFailureMessage({
+              provider,
+              host: smtpHost,
+              port: smtpPort,
+              senderEmail,
+              smtpUsername,
+              smtpError: authResult.error,
+            }),
+          },
           422,
         );
       }
@@ -124,9 +268,10 @@ Deno.serve(async (request) => {
             smtp_port: smtpPort,
             smtp_username: smtpUsername,
             smtp_password_encrypted: encryptedPassword,
-            smtp_use_tls: body.smtp_use_tls ?? true,
+            smtp_use_tls: smtpUseTls,
             status: 'connected',
             health_status: 'healthy',
+            last_health_error: null,
             is_default: body.make_default ?? false,
             is_active: true,
             connected_at: new Date().toISOString(),

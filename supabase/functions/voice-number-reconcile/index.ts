@@ -12,7 +12,7 @@ import {
   saveWorkspacePhoneNumber,
   toWorkspacePhoneNumberView,
   type WorkspacePhoneNumberRow,
-} from '../_shared/voice-repository.ts';
+} from '../_shared/voice-number-repository.ts';
 
 function buildCustomerReference(workspaceId: string) {
   return `coreflow:workspace:${workspaceId}`;
