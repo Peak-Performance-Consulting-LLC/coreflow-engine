@@ -4,7 +4,7 @@ import {
   Droppable,
   Draggable,
   type DropResult,
-} from 'react-beautiful-dnd';
+} from '@hello-pangea/dnd';
 import { Trash2, Edit3 } from 'lucide-react';
 import type { EmailLayoutBlock, EmailTemplateLayout } from '../../lib/email-template-service';
 
