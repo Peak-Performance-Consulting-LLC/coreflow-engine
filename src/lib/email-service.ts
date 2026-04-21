@@ -146,11 +146,28 @@ export function renderTemplatePreview(template: string, workspaceName: string): 
     .replace(/\{\{sender_email\}\}/g, 'jane@yourcompany.com');
 }
 
+async function getFunctionAuthHeaders(): Promise<Record<string, string> | undefined> {
+  const sb = getSupabaseClient();
+  const {
+    data: { session },
+  } = await sb.auth.getSession();
+
+  if (!session?.access_token) {
+    return undefined;
+  }
+
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
+
 /* ─── API calls ───────────────────────────────────────────────────────── */
 
 export async function fetchAccountSettings(): Promise<AccountSettingsGetResponse> {
   const sb = getSupabaseClient();
-  const { data, error } = await sb.functions.invoke<AccountSettingsGetResponse>('account-settings-get');
+  const { data, error } = await sb.functions.invoke<AccountSettingsGetResponse>('account-settings-get', {
+    headers: await getFunctionAuthHeaders(),
+  });
   if (error) throw new Error(error.message);
   if (!data) throw new Error('No data returned from account-settings-get.');
   return data;
@@ -169,7 +186,10 @@ export interface SmtpSenderInput {
 
 export async function addSmtpSender(input: SmtpSenderInput & { make_default?: boolean }): Promise<void> {
   const sb = getSupabaseClient();
-  const { error } = await sb.functions.invoke('account-settings-sender-add', { body: input });
+  const { error } = await sb.functions.invoke('account-settings-sender-add', {
+    body: input,
+    headers: await getFunctionAuthHeaders(),
+  });
   if (error) throw new Error(error.message);
 }
 
@@ -181,6 +201,7 @@ export async function initiateOauth(
   const sb = getSupabaseClient();
   const { data, error } = await sb.functions.invoke<{ authorize_url: string }>('email-oauth-start', {
     body: { provider, workspace_id: workspaceId, return_path: '/email' },
+    headers: await getFunctionAuthHeaders(),
   });
   if (error) throw new Error(error.message);
   if (!data?.authorize_url) throw new Error('No authorize URL returned.');
@@ -195,7 +216,10 @@ export async function enrollLead(
     followup_id: string;
     steps_scheduled: number;
     message: string;
-  }>('email-enroll-lead', { body: { record_id: recordId } });
+  }>('email-enroll-lead', {
+    body: { record_id: recordId },
+    headers: await getFunctionAuthHeaders(),
+  });
   if (error) throw new Error(error.message);
   if (!data) throw new Error('No response from enroll function.');
   return data;
@@ -217,6 +241,7 @@ export async function controlLeadSequence(
       record_id: recordId,
       action,
     },
+    headers: await getFunctionAuthHeaders(),
   });
 
   if (error) throw new Error(error.message);
@@ -332,6 +357,7 @@ export async function scheduleManualEmail(
       workspace_id: workspaceId,
       ...payload,
     },
+    headers: await getFunctionAuthHeaders(),
   });
 
   if (error) throw new Error(error.message);
@@ -403,6 +429,7 @@ export async function dispatchDueManualEmails(
     body: {
       workspace_id: workspaceId,
     },
+    headers: await getFunctionAuthHeaders(),
   });
 
   if (error) throw new Error(error.message);
@@ -438,6 +465,7 @@ export async function sendManualEmailNow(
       workspace_id: workspaceId,
       ...payload,
     },
+    headers: await getFunctionAuthHeaders(),
   });
 
   if (error) throw new Error(error.message);

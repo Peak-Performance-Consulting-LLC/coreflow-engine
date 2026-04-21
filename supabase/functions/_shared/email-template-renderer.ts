@@ -126,6 +126,14 @@ function alignStyle(align: string) {
   return 'left';
 }
 
+function sanitizeEmailImageUrl(value: string) {
+  const raw = asString(value);
+  if (!raw) return '';
+  if (/^(data:|blob:|file:)/i.test(raw)) return '';
+  if (raw.startsWith('//')) return `https:${raw}`;
+  return /^https?:\/\//i.test(raw) ? raw : '';
+}
+
 function renderTokens(template: string, tokens: Record<string, string>) {
   let output = template;
 
@@ -342,7 +350,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
   const links = parseResourceLinks(meta.links);
   const documents = parseResourceLinks(meta.documents);
   const sectionStyle = [
-    `padding:${paddingTop}px 32px ${paddingBottom}px 32px`,
+    `padding:${paddingTop}px 24px ${paddingBottom}px 24px`,
     `text-align:${align}`,
     `font-family:${theme.bodyFont}`,
     `color:${textColor}`,
@@ -353,11 +361,11 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
     .join(';');
 
   if (block.type === 'header') {
-    const logo = block.imageUrl || theme.logoUrl;
+    const logo = sanitizeEmailImageUrl(block.imageUrl || theme.logoUrl);
     const brandName = title || escapeHtml(theme.brandName);
     return `
       <tr>
-        <td style="${sectionStyle}">
+        <td class="section-pad" style="${sectionStyle}">
           ${logo ? `<img src="${escapeHtml(logo)}" alt="Logo" style="max-height:48px;max-width:180px;display:inline-block;"/>` : ''}
           <div style="font-family:${theme.headingFont};font-size:20px;font-weight:700;color:${theme.secondaryColor};margin-top:${logo ? '12px' : '0'};">${brandName}</div>
           ${subtitle ? `<div style="font-family:${theme.bodyFont};font-size:13px;color:${theme.textColor};opacity:.8;margin-top:6px;">${subtitle}</div>` : ''}
@@ -369,7 +377,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
   if (block.type === 'hero') {
     return `
       <tr>
-        <td style="${sectionStyle}">
+        <td class="section-pad" style="${sectionStyle}">
           <div style="font-family:${theme.headingFont};font-size:34px;line-height:1.15;font-weight:700;color:${theme.secondaryColor};">${title || escapeHtml(renderTokens(content, tokens))}</div>
           ${subtitle ? `<div style="font-family:${theme.bodyFont};font-size:15px;line-height:1.6;color:${theme.textColor};margin-top:10px;">${subtitle}</div>` : ''}
           ${content && title ? `<div style="font-family:${theme.bodyFont};font-size:15px;line-height:1.7;margin-top:10px;">${content}</div>` : ''}
@@ -383,7 +391,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
   if (block.type === 'text') {
     return `
       <tr>
-        <td style="${sectionStyle};font-size:15px;line-height:1.7;">
+        <td class="section-pad" style="${sectionStyle};font-size:15px;line-height:1.7;">
           ${content || '&nbsp;'}
           ${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont, tokens)}
           ${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont, tokens)}
@@ -393,12 +401,12 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
   }
 
   if (block.type === 'image') {
-    const url = block.imageUrl || '';
+    const url = sanitizeEmailImageUrl(block.imageUrl || '');
     if (!url) return '';
 
     return `
       <tr>
-        <td style="${sectionStyle}">
+        <td class="section-pad" style="${sectionStyle}">
           <img src="${escapeHtml(renderTokens(url, tokens))}" alt="${escapeHtml(block.altText || '')}" style="width:${Math.max(20, Math.min(100, asNumber(meta.widthPercent, 100)))}%;max-width:100%;height:auto;border-radius:${Math.max(0, Math.min(24, asNumber(meta.imageRadius, 12)))}px;display:inline-block;" />
         </td>
       </tr>
@@ -414,7 +422,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
 
     return `
       <tr>
-        <td style="${sectionStyle}">
+        <td class="section-pad" style="${sectionStyle}">
           <a href="${url}" style="display:inline-block;background:${buttonBackground};color:${buttonTextColor};text-decoration:none;font-family:${theme.bodyFont};font-size:14px;font-weight:700;padding:12px 20px;border-radius:${buttonRadius}px;">${label}</a>
           ${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont, tokens)}
           ${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont, tokens)}
@@ -426,7 +434,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
   if (block.type === 'divider') {
     return `
       <tr>
-        <td style="padding:16px 32px;">
+        <td class="section-pad" style="padding:14px 24px;">
           <div style="height:1px;background:rgba(15,23,42,0.12);"></div>
         </td>
       </tr>
@@ -439,7 +447,7 @@ function renderBlockHtml(block: EmailLayoutBlock, tokens: Record<string, string>
 
   return `
     <tr>
-      <td style="${sectionStyle};font-size:12px;line-height:1.6;opacity:.72;">
+      <td class="section-pad" style="${sectionStyle};font-size:12px;line-height:1.6;opacity:.72;">
         ${content ? `<div>${renderTokens(content, tokens)}</div>` : ''}
         ${footerLine ? `<div>${escapeHtml(footerLine)}</div>` : ''}
         <div>${escapeHtml(theme.footerSignature)}</div>
@@ -528,10 +536,17 @@ function renderLayoutHtml(layout: EmailLayoutBlock[], tokens: Record<string, str
     .join('');
 
   return `
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${theme.bodyBgColor};padding:24px 0;">
+    <style>
+      @media only screen and (max-width:620px){
+        .email-wrap{width:100%!important;}
+        .outer-pad{padding:6px 0!important;}
+        .section-pad{padding-left:10px!important;padding-right:10px!important;}
+      }
+    </style>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${theme.bodyBgColor};margin:0;padding:0;">
       <tr>
-        <td align="center">
-          <table role="presentation" cellpadding="0" cellspacing="0" width="640" style="width:640px;max-width:100%;background:${theme.cardBgColor};border-radius:16px;overflow:hidden;">
+        <td class="outer-pad" align="center" style="padding:14px 10px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="email-wrap" style="width:600px;max-width:100%;background:${theme.cardBgColor};border-radius:12px;overflow:hidden;">
             ${renderedBlocks}
           </table>
         </td>

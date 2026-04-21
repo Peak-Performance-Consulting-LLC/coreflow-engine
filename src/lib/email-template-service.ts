@@ -383,6 +383,14 @@ function stripHtml(value: string) {
     .trim();
 }
 
+function sanitizeEmailImageUrl(value: string) {
+  const raw = asString(value);
+  if (!raw) return '';
+  if (/^(data:|blob:|file:)/i.test(raw)) return '';
+  if (raw.startsWith('//')) return `https:${raw}`;
+  return /^https?:\/\//i.test(raw) ? raw : '';
+}
+
 function normalizePreviewTheme(overrides?: Record<string, unknown>) {
   const source = asRecord(overrides);
   return {
@@ -435,7 +443,7 @@ function renderLayoutBlockHtml(block: EmailLayoutBlock, theme: ReturnType<typeof
   const documents = parseResourceLinks(meta.documents);
 
   const sectionStyle = [
-    `padding:${paddingTop}px 32px ${paddingBottom}px 32px`,
+    `padding:${paddingTop}px 24px ${paddingBottom}px 24px`,
     `text-align:${align}`,
     `font-family:${theme.bodyFont}`,
     `color:${textColor}`,
@@ -446,23 +454,23 @@ function renderLayoutBlockHtml(block: EmailLayoutBlock, theme: ReturnType<typeof
     .join(';');
 
   if (block.type === 'header') {
-    const logo = asString(block.imageUrl);
-    return `<tr><td style="${sectionStyle}">${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(asString(block.altText) || 'Logo')}" style="max-height:48px;max-width:180px;display:inline-block;margin-bottom:10px;" />` : ''}<h2 style="margin:0;font-family:${theme.headingFont};font-size:22px;line-height:1.3;color:${theme.headingColor};">${escapeHtml(title || 'Your Brand')}</h2>${subtitle ? `<p style="margin:8px 0 0 0;opacity:.85;">${escapeHtml(subtitle)}</p>` : ''}</td></tr>`;
+    const logo = sanitizeEmailImageUrl(block.imageUrl || '');
+    return `<tr><td class="section-pad" style="${sectionStyle}">${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(asString(block.altText) || 'Logo')}" style="max-height:48px;max-width:180px;display:inline-block;margin-bottom:10px;" />` : ''}<h2 style="margin:0;font-family:${theme.headingFont};font-size:22px;line-height:1.3;color:${theme.headingColor};">${escapeHtml(title || 'Your Brand')}</h2>${subtitle ? `<p style="margin:8px 0 0 0;opacity:.85;">${escapeHtml(subtitle)}</p>` : ''}</td></tr>`;
   }
 
   if (block.type === 'hero') {
-    return `<tr><td style="${sectionStyle}"><h1 style="margin:0;font-family:${theme.headingFont};font-size:34px;line-height:1.18;color:${theme.headingColor};">${escapeHtml(title || content)}</h1>${subtitle ? `<p style="margin:12px 0 0 0;font-size:16px;line-height:1.6;">${escapeHtml(subtitle)}</p>` : ''}${content && title ? `<div style="margin-top:12px;font-size:15px;line-height:1.7;">${content}</div>` : ''}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
+    return `<tr><td class="section-pad" style="${sectionStyle}"><h1 style="margin:0;font-family:${theme.headingFont};font-size:34px;line-height:1.18;color:${theme.headingColor};">${escapeHtml(title || content)}</h1>${subtitle ? `<p style="margin:12px 0 0 0;font-size:16px;line-height:1.6;">${escapeHtml(subtitle)}</p>` : ''}${content && title ? `<div style="margin-top:12px;font-size:15px;line-height:1.7;">${content}</div>` : ''}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
   }
 
   if (block.type === 'text') {
-    return `<tr><td style="${sectionStyle};font-size:15px;line-height:1.75;">${content || '&nbsp;'}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
+    return `<tr><td class="section-pad" style="${sectionStyle};font-size:15px;line-height:1.75;">${content || '&nbsp;'}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
   }
 
   if (block.type === 'image') {
-    const imageUrl = asString(block.imageUrl);
+    const imageUrl = sanitizeEmailImageUrl(block.imageUrl || '');
     if (!imageUrl) return '';
     const widthPercent = Math.max(20, Math.min(100, asNumber(meta.widthPercent, 100)));
-    return `<tr><td style="${sectionStyle}"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(asString(block.altText))}" style="width:${widthPercent}%;max-width:100%;height:auto;border-radius:${Math.max(0, Math.min(20, asNumber(meta.imageRadius, 12)))}px;" /></td></tr>`;
+    return `<tr><td class="section-pad" style="${sectionStyle}"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(asString(block.altText))}" style="width:${widthPercent}%;max-width:100%;height:auto;border-radius:${Math.max(0, Math.min(20, asNumber(meta.imageRadius, 12)))}px;" /></td></tr>`;
   }
 
   if (block.type === 'cta') {
@@ -471,14 +479,14 @@ function renderLayoutBlockHtml(block: EmailLayoutBlock, theme: ReturnType<typeof
     const buttonBackground = asString(meta.buttonBackgroundColor) || theme.accentColor;
     const buttonTextColor = asString(meta.buttonTextColor) || '#ffffff';
     const buttonRadius = Math.max(0, Math.min(24, asNumber(meta.buttonRadius, 10)));
-    return `<tr><td style="${sectionStyle}"><a href="${escapeHtml(url)}" style="display:inline-block;background:${buttonBackground};color:${buttonTextColor};text-decoration:none;padding:12px 20px;border-radius:${buttonRadius}px;font-weight:700;letter-spacing:.01em;">${escapeHtml(label)}</a>${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
+    return `<tr><td class="section-pad" style="${sectionStyle}"><a href="${escapeHtml(url)}" style="display:inline-block;background:${buttonBackground};color:${buttonTextColor};text-decoration:none;padding:12px 20px;border-radius:${buttonRadius}px;font-weight:700;letter-spacing:.01em;">${escapeHtml(label)}</a>${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
   }
 
   if (block.type === 'divider') {
-    return '<tr><td style="padding:14px 32px;"><div style="height:1px;background:rgba(15,23,42,0.14);"></div></td></tr>';
+    return '<tr><td class="section-pad" style="padding:14px 24px;"><div style="height:1px;background:rgba(15,23,42,0.14);"></div></td></tr>';
   }
 
-  return `<tr><td style="${sectionStyle};font-size:12px;line-height:1.65;opacity:.82;">${content || 'Need help? Reply to this email.'}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
+  return `<tr><td class="section-pad" style="${sectionStyle};font-size:12px;line-height:1.65;opacity:.82;">${content || 'Need help? Reply to this email.'}${renderResourceLinksHtml(links, 'Related links', theme.accentColor, theme.bodyFont)}${renderResourceLinksHtml(documents, 'Documents', theme.accentColor, theme.bodyFont)}</td></tr>`;
 }
 
 function renderLayoutBlockText(block: EmailLayoutBlock) {
@@ -521,10 +529,17 @@ export function deriveTemplateOutputs(layoutJson: EmailTemplateLayout, themeOver
     .join('');
 
   const htmlBody = `
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${theme.bodyBg};padding:24px 0;">
+    <style>
+      @media only screen and (max-width:620px){
+        .email-wrap{width:100%!important;}
+        .outer-pad{padding:6px 0!important;}
+        .section-pad{padding-left:10px!important;padding-right:10px!important;}
+      }
+    </style>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${theme.bodyBg};margin:0;padding:0;">
       <tr>
-        <td align="center">
-          <table role="presentation" cellpadding="0" cellspacing="0" width="640" style="width:640px;max-width:100%;background:${theme.cardBg};border-radius:16px;overflow:hidden;">
+        <td class="outer-pad" align="center" style="padding:14px 10px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="email-wrap" style="width:600px;max-width:100%;background:${theme.cardBg};border-radius:12px;overflow:hidden;">
             ${rows}
           </table>
         </td>
@@ -780,39 +795,43 @@ export async function uploadAsset(
   isLogo = false,
 ): Promise<EmailTemplateAsset> {
   const sb = getSupabaseClient();
+  const MAX_ASSET_BYTES = 50 * 1024 * 1024;
 
-  const timestamp = Date.now();
-  const filename = `${timestamp}-${file.name}`;
-  const storagePath = `${workspaceId}/${fileType}/${filename}`;
+  if (file.size <= 0) {
+    throw new Error('Upload failed: empty files are not allowed.');
+  }
+  if (file.size > MAX_ASSET_BYTES) {
+    throw new Error('Upload failed: file size exceeds the 50MB limit.');
+  }
 
-  const { error: uploadError } = await sb.storage.from('email-assets').upload(storagePath, file, {
-    cacheControl: '3600',
-    upsert: false,
+  const safeBaseName = file.name
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+
+  const formData = new FormData();
+  formData.append('workspace_id', workspaceId);
+  formData.append('file_type', fileType);
+  formData.append('is_logo', String(isLogo));
+  formData.append('filename', safeBaseName || file.name || 'asset');
+  formData.append('file', file);
+
+  const { data, error } = await sb.functions.invoke('email-assets-upload', {
+    body: formData,
   });
 
-  if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+  if (error) {
+    const message = error.message || 'Unable to upload this file right now.';
+    throw new Error(`Upload failed: ${message}`);
+  }
 
-  const {
-    data: { publicUrl },
-  } = sb.storage.from('email-assets').getPublicUrl(storagePath);
+  if (!data || typeof data !== 'object' || !('asset' in data)) {
+    throw new Error('Upload failed: Unexpected response from upload service.');
+  }
 
-  const { data, error } = await sb
-    .from('email_template_assets')
-    .insert({
-      workspace_id: workspaceId,
-      name: file.name,
-      file_type: fileType,
-      mime_type: file.type,
-      file_size: file.size,
-      storage_path: storagePath,
-      public_url: publicUrl,
-      is_logo: isLogo,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data as EmailTemplateAsset;
+  return (data as { asset: EmailTemplateAsset }).asset;
 }
 
 export async function deleteAsset(assetId: string): Promise<void> {

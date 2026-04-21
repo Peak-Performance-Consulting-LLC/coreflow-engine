@@ -94,3 +94,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.voice-number-update]
 verify_jwt = false
+[functions.email-assets-bootstrap]
+verify_jwt = false
+[functions.email-assets-upload]
+verify_jwt = false

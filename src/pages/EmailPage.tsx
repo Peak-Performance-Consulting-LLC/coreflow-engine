@@ -37,6 +37,7 @@ import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { useAuth } from '../hooks/useAuth';
 import type { WorkspaceSummary } from '../lib/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
+import { uploadAsset } from '../lib/email-template-service';
 import {
   type AccountSettingsGetResponse,
   type EmailProvider,
@@ -129,11 +130,11 @@ interface EmailCanvasStyle {
 }
 
 const DEFAULT_CANVAS_STYLE: EmailCanvasStyle = {
-  outerBgColor: '#f0f0f0',
+  outerBgColor: '#ffffff',
   containerBgColor: '#ffffff',
   containerWidth: 600,
-  containerRadius: 10,
-  shadowBlur: 24,
+  containerRadius: 12,
+  shadowBlur: 0,
   baseFont: 'Arial, Helvetica, sans-serif',
 };
 
@@ -167,40 +168,215 @@ function createDefaultBlock(type: BlockType): EmailBlock {
   }
 }
 
+interface EmailTemplateEditorState {
+  blocks: EmailBlock[];
+  canvasStyle: EmailCanvasStyle;
+}
+
+const EDITOR_STATE_COMMENT_PREFIX = 'coreflow-editor-state:';
+
+function cloneBlocks(blocks: EmailBlock[]) {
+  return blocks.map(block => ({ ...block })) as EmailBlock[];
+}
+
+function cloneCanvasStyle(style: EmailCanvasStyle): EmailCanvasStyle {
+  return { ...style };
+}
+
+function stripHtmlTags(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isTechnicalLine(line: string) {
+  const normalized = line.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    normalized.includes('@media only screen') ||
+    normalized.includes('.email-wrap') ||
+    normalized.includes('.outer-pad') ||
+    normalized.includes('.section-pad') ||
+    normalized.includes('font-family:') ||
+    normalized.includes('border-collapse:') ||
+    normalized.includes('text-decoration:') ||
+    normalized.includes('max-width:100%') ||
+    normalized.includes('padding-left:10px') ||
+    normalized.includes('padding-right:10px') ||
+    /(^|[\s])(?:body|table|img|a)\s*\{/.test(normalized) ||
+    normalized === '{' ||
+    normalized === '}'
+  );
+}
+
+function sanitizeLegacyText(text: string) {
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !isTechnicalLine(line))
+    .join('\n');
+}
+
+function hasTechnicalLeakInBlocks(blocks: EmailBlock[]) {
+  return blocks.some((block) => {
+    if (block.type !== 'text' && block.type !== 'footer') return false;
+    return isTechnicalLine(stripHtmlTags(block.html));
+  });
+}
+
+function encodeEditorStateComment(editorState: EmailTemplateEditorState) {
+  try {
+    const json = JSON.stringify(editorState);
+    const bytes = new TextEncoder().encode(json);
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return `<!-- ${EDITOR_STATE_COMMENT_PREFIX}${btoa(binary)} -->`;
+  } catch {
+    return '';
+  }
+}
+
+function decodeEditorStateFromHtml(html: string): EmailTemplateEditorState | null {
+  const match = html.match(/<!--\s*coreflow-editor-state:([A-Za-z0-9+/=]+)\s*-->/i);
+  if (!match) return null;
+
+  try {
+    const binary = atob(match[1]);
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    const parsed: unknown = JSON.parse(json);
+    return coerceEditorState(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function coerceEditorState(value: unknown): EmailTemplateEditorState | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { blocks?: unknown; canvasStyle?: unknown };
+  if (!Array.isArray(candidate.blocks) || candidate.blocks.length === 0) return null;
+
+  const blocks = candidate.blocks
+    .filter((block): block is EmailBlock => Boolean(block) && typeof block === 'object' && typeof (block as { type?: unknown }).type === 'string');
+
+  if (blocks.length === 0) return null;
+
+  const rawCanvas = candidate.canvasStyle;
+  const canvasObject = rawCanvas && typeof rawCanvas === 'object' ? rawCanvas as Partial<EmailCanvasStyle> : {};
+
+  return {
+    blocks: cloneBlocks(blocks),
+    canvasStyle: {
+      ...DEFAULT_CANVAS_STYLE,
+      ...canvasObject,
+    },
+  };
+}
+
+function extractLegacyTextContent(htmlOrText: string) {
+  const raw = htmlOrText.trim();
+  if (!raw) return '';
+  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return sanitizeLegacyText(raw);
+
+  try {
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const visualRoot = doc.querySelector('.email-wrap') ?? doc.body;
+    const visibleText =
+      (visualRoot instanceof HTMLElement ? visualRoot.innerText : visualRoot?.textContent) ?? '';
+    return sanitizeLegacyText(visibleText.trim());
+  } catch {
+    return sanitizeLegacyText(raw);
+  }
+}
+
+function buildLegacyEditorState(template: { body: string; subject: string }): EmailTemplateEditorState {
+  const textContent = extractLegacyTextContent(template.body) || template.subject || 'Write your message here.';
+  const textBlock = createDefaultBlock('text') as TextBlockData;
+
+  textBlock.html = `<p style="margin:0;font-size:15px;line-height:1.75;color:#334155;white-space:pre-wrap;">${escapeAttr(textContent)}</p>`;
+
+  return {
+    blocks: [
+      createDefaultBlock('header'),
+      textBlock,
+      createDefaultBlock('footer'),
+    ],
+    canvasStyle: cloneCanvasStyle(DEFAULT_CANVAS_STYLE),
+  };
+}
+
+function sanitizeEmailImageUrl(value?: string | null) {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  if (/^(data:|blob:|file:)/i.test(raw)) return '';
+  if (raw.startsWith('//')) return `https:${raw}`;
+  return /^https?:\/\//i.test(raw) ? raw : '';
+}
+
+function escapeAttr(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /* ─── Generate email-safe HTML from blocks ───────────────────────────── */
 function generateEmailHtml(blocks: EmailBlock[], subject: string = '', canvas: Partial<EmailCanvasStyle> = {}): string {
   const style = { ...DEFAULT_CANVAS_STYLE, ...canvas };
+  const sectionPadX = 24;
+  const hasShadow = style.shadowBlur > 0;
+  const editorStateComment = encodeEditorStateComment({
+    blocks: cloneBlocks(blocks),
+    canvasStyle: cloneCanvasStyle(style),
+  });
+
   const rows = blocks.map(b => {
     switch (b.type) {
-      case 'header': return `
-        <tr><td style="background:${b.bgColor};padding:${b.padding}px 30px;text-align:center;">
-          ${b.imageUrl
-            ? `<img src="${b.imageUrl}" alt="${b.logoText}" style="max-height:60px;max-width:220px;display:inline-block;" />`
-            : `<div style="font-size:26px;font-weight:800;color:${b.logoColor};letter-spacing:-0.5px;">${b.logoText}</div>`
-          }
-        </td></tr>`;
-      case 'text': return `
-        <tr><td style="background:${b.bgColor};padding:${b.padding}px 36px;${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}${b.borderRadius > 0 ? `border-radius:${b.borderRadius}px;` : ''}">${b.html}</td></tr>`;
-      case 'image': {
-        const alignStyle = b.align === 'center' ? 'margin:0 auto;' : b.align === 'right' ? 'margin-left:auto;' : '';
-        const imgTag = `<img src="${b.imageUrl}" alt="${b.altText || ''}" style="width:${b.width}%;max-width:${b.width}%;height:auto;display:block;${alignStyle}border-radius:${b.borderRadius}px;${b.shadow ? 'box-shadow:0 10px 24px rgba(15,23,42,0.22);' : ''}" />`;
+      case 'header': {
+        const logoUrl = sanitizeEmailImageUrl(b.imageUrl);
         return `
-        <tr><td style="background:${b.bgColor};padding:${b.padding}px 30px;text-align:${b.align};">
-          ${b.link ? `<a href="${b.link}" style="display:block;">${imgTag}</a>` : imgTag}
+          <tr>
+            <td class="section-pad" style="background:${b.bgColor};padding:${b.padding}px ${sectionPadX}px;text-align:center;">
+              ${logoUrl
+                ? `<img src="${escapeAttr(logoUrl)}" alt="${escapeAttr(b.logoText || 'Brand logo')}" style="max-height:54px;max-width:220px;width:auto;display:inline-block;border:0;outline:none;text-decoration:none;" />`
+                : `<div style="font-size:24px;font-weight:800;color:${b.logoColor};letter-spacing:-0.3px;">${b.logoText}</div>`
+              }
+            </td>
+          </tr>`;
+      }
+      case 'text': return `
+        <tr>
+          <td class="section-pad" style="background:${b.bgColor};padding:${b.padding}px ${sectionPadX}px;${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}${b.borderRadius > 0 ? `border-radius:${b.borderRadius}px;` : ''}">${b.html}</td>
+        </tr>`;
+      case 'image': {
+        const imageUrl = sanitizeEmailImageUrl(b.imageUrl);
+        const alignStyle = b.align === 'center' ? 'margin:0 auto;' : b.align === 'right' ? 'margin-left:auto;' : '';
+        const imgTag = imageUrl
+          ? `<img src="${escapeAttr(imageUrl)}" alt="${escapeAttr(b.altText || '')}" style="width:${b.width}%;max-width:${b.width}%;height:auto;display:block;${alignStyle}border-radius:${b.borderRadius}px;${b.shadow ? 'box-shadow:0 10px 24px rgba(15,23,42,0.18);' : ''}" />`
+          : `<div style="border:1px dashed #cbd5e1;border-radius:10px;padding:12px;font-size:12px;color:#64748b;text-align:${b.align};">Image URL missing or unsupported.</div>`;
+        return `
+        <tr><td class="section-pad" style="background:${b.bgColor};padding:${b.padding}px ${sectionPadX}px;text-align:${b.align};">
+          ${b.link ? `<a href="${escapeAttr(b.link)}" style="display:block;">${imgTag}</a>` : imgTag}
           ${b.caption ? `<p style="margin:8px 0 0;font-size:12px;color:#777;text-align:${b.align};">${b.caption}</p>` : ''}
         </td></tr>`;
       }
       case 'button': return `
-        <tr><td style="padding:20px 30px;text-align:${b.align};">
-          <a href="${b.href}" style="display:inline-block;background:${b.bgColor};color:${b.textColor};font-size:${b.fontSize}px;font-weight:700;text-decoration:none;padding:${b.btnPadding};border-radius:${b.borderRadius}px;letter-spacing:0.2px;${b.fullWidth ? 'width:100%;text-align:center;box-sizing:border-box;' : ''}${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}">${b.label}</a>
+        <tr><td class="section-pad" style="padding:16px ${sectionPadX}px;text-align:${b.align};">
+          <a href="${escapeAttr(b.href)}" style="display:inline-block;background:${b.bgColor};color:${b.textColor};font-size:${b.fontSize}px;font-weight:700;text-decoration:none;padding:${b.btnPadding};border-radius:${b.borderRadius}px;letter-spacing:0.2px;${b.fullWidth ? 'width:100%;text-align:center;box-sizing:border-box;' : ''}${b.borderWidth > 0 ? `border:${b.borderWidth}px solid ${b.borderColor};` : ''}">${b.label}</a>
         </td></tr>`;
       case 'divider': return `
-        <tr><td style="background:${b.bgColor};padding:${b.marginY}px 30px;">
+        <tr><td class="section-pad" style="background:${b.bgColor};padding:${b.marginY}px ${sectionPadX}px;">
           <hr style="border:none;border-top:${b.thickness}px solid ${b.color};margin:0;" />
         </td></tr>`;
       case 'spacer': return `<tr><td style="height:${b.height}px;line-height:${b.height}px;">&nbsp;</td></tr>`;
       case 'footer': return `
-        <tr><td style="background:${b.bgColor};color:${b.textColor};padding:${b.padding}px 30px;text-align:${b.align};font-size:12px;">${b.html}</td></tr>`;
+        <tr><td class="section-pad" style="background:${b.bgColor};color:${b.textColor};padding:${b.padding}px ${sectionPadX}px;text-align:${b.align};font-size:12px;">${b.html}</td></tr>`;
       default: return '';
     }
   }).join('\n');
@@ -210,19 +386,24 @@ function generateEmailHtml(blocks: EmailBlock[], subject: string = '', canvas: P
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>${subject}</title>
+<title>${escapeAttr(subject)}</title>
+${editorStateComment}
 <style>
-  body{margin:0;padding:0;background:${style.outerBgColor};font-family:${style.baseFont};}
-  a{color:inherit;}
+  body{margin:0;padding:0;background:${style.outerBgColor};font-family:${style.baseFont};-webkit-font-smoothing:antialiased;}
+  table{border-collapse:collapse;border-spacing:0;}
+  img{max-width:100%;height:auto;border:0;line-height:100%;outline:none;text-decoration:none;}
+  a{color:inherit;text-decoration:none;}
   @media only screen and (max-width:620px){
     .email-wrap{width:100%!important;}
+    .outer-pad{padding:6px 0!important;}
+    .section-pad{padding-left:10px!important;padding-right:10px!important;}
   }
 </style>
 </head>
 <body style="margin:0;padding:0;background:${style.outerBgColor};">
 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${style.outerBgColor};">
-<tr><td align="center" style="padding:24px 12px;">
-<table class="email-wrap" width="${style.containerWidth}" cellpadding="0" cellspacing="0" border="0" style="background:${style.containerBgColor};border-radius:${style.containerRadius}px;overflow:hidden;box-shadow:0 10px ${style.shadowBlur}px rgba(2,6,23,0.14);">
+<tr><td align="center" class="outer-pad" style="padding:16px 10px;">
+<table class="email-wrap" width="${style.containerWidth}" cellpadding="0" cellspacing="0" border="0" style="width:${style.containerWidth}px;max-width:100%;background:${style.containerBgColor};border-radius:${style.containerRadius}px;overflow:hidden;${hasShadow ? `box-shadow:0 10px ${style.shadowBlur}px rgba(2,6,23,0.14);` : ''}">
 ${rows}
 </table>
 </td></tr>
@@ -235,6 +416,7 @@ ${rows}
 interface EmailTemplate {
   id: string; name: string; category: string; subject: string; body: string;
   tags: string[]; isPremade?: boolean; isHtml?: boolean;
+  editorState?: EmailTemplateEditorState;
 }
 const TEMPLATE_CATEGORIES = ['All', 'Welcome', 'Follow-up', 'Promotional', 'Re-engagement', 'Custom'];
 
@@ -387,6 +569,12 @@ function loadStoredCustomTemplates(workspaceId: string): EmailTemplate[] {
         typeof item.body === 'string'
       )
       .map(item => ({
+        // Keep structured block/canvas state when available so templates remain fully editable.
+        ...(() => {
+          const fromRecord = coerceEditorState((item as { editorState?: unknown }).editorState);
+          const fromHtml = typeof item.body === 'string' ? decodeEditorStateFromHtml(item.body) : null;
+          return { editorState: fromRecord ?? fromHtml ?? undefined };
+        })(),
         id: item.id as string,
         name: item.name as string,
         category: item.category as string,
@@ -507,7 +695,7 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
       {loading && !data ? <LoadingSkeleton /> : (
         <>
           {activeTab === 'config' && <ConfigTab data={data} workspaceId={workspace.id} onRefresh={reload} />}
-          {activeTab === 'templates' && <TemplatesTab customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
+          {activeTab === 'templates' && <TemplatesTab workspaceId={workspace.id} customTemplates={customTemplates} setCustomTemplates={setCustomTemplates} />}
           {activeTab === 'scheduling' && <SchedulingTab data={data} workspaceId={workspace.id} onRefresh={reload} allTemplates={allTemplates} leadOptions={leadOptions} />}
         </>
       )}
@@ -684,13 +872,22 @@ function SmtpDrawer({ provider: providerId, workspaceId, onClose, onSuccess }: {
 type TemplateMode = 'browse' | 'create' | 'edit';
 type SetCustomTemplates = (value: EmailTemplate[] | ((prev: EmailTemplate[]) => EmailTemplate[])) => void;
 
-function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates: EmailTemplate[]; setCustomTemplates: SetCustomTemplates }) {
+function TemplatesTab({
+  workspaceId,
+  customTemplates,
+  setCustomTemplates,
+}: {
+  workspaceId: string;
+  customTemplates: EmailTemplate[];
+  setCustomTemplates: SetCustomTemplates;
+}) {
   const [mode, setMode] = useState<TemplateMode>('browse');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [previewingTemplate, setPreviewingTemplate] = useState<EmailTemplate | null>(null);
   const [designerBlocks, setDesignerBlocks] = useState<EmailBlock[]>([]);
+  const [designerCanvasStyle, setDesignerCanvasStyle] = useState<EmailCanvasStyle>(cloneCanvasStyle(DEFAULT_CANVAS_STYLE));
   const [designerMeta, setDesignerMeta] = useState({ name: '', category: 'Custom', subject: '' });
 
   const allTemplates = [...PREMADE_TEMPLATES, ...customTemplates];
@@ -703,41 +900,71 @@ function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates
   function openCreate() {
     setDesignerMeta({ name: '', category: 'Custom', subject: '' });
     setDesignerBlocks([createDefaultBlock('header'), createDefaultBlock('text'), createDefaultBlock('button'), createDefaultBlock('footer')]);
+    setDesignerCanvasStyle(cloneCanvasStyle(DEFAULT_CANVAS_STYLE));
     setEditingTemplate(null);
     setMode('create');
   }
 
+  function resolveTemplateEditorState(template: EmailTemplate): EmailTemplateEditorState {
+    const resolved = (
+      template.editorState ??
+      decodeEditorStateFromHtml(template.body) ??
+      buildLegacyEditorState(template)
+    );
+
+    // Recover old broken states where CSS/source text leaked into visible content.
+    if (hasTechnicalLeakInBlocks(resolved.blocks)) {
+      return buildLegacyEditorState(template);
+    }
+
+    return resolved;
+  }
+
   function openEdit(t: EmailTemplate) {
     setDesignerMeta({ name: t.name, category: t.category, subject: t.subject });
-    // If already designed as HTML blocks, start fresh; plain text gets wrapped in a text block
-    if (t.isHtml) {
-      setDesignerBlocks([{ ...createDefaultBlock('text'), id: 'imported', html: t.body } as TextBlockData]);
-    } else {
-      setDesignerBlocks([
-        createDefaultBlock('header'),
-        { ...createDefaultBlock('text'), id: 'body-text', html: `<p style="margin:0;font-size:15px;line-height:1.7;color:#333;white-space:pre-wrap;">${t.body}</p>` } as TextBlockData,
-        createDefaultBlock('footer'),
-      ]);
-    }
+    const editorState = resolveTemplateEditorState(t);
+    setDesignerBlocks(cloneBlocks(editorState.blocks));
+    setDesignerCanvasStyle(cloneCanvasStyle(editorState.canvasStyle));
     setEditingTemplate(t);
     setMode('edit');
   }
 
   function handleCopyTemplate(t: EmailTemplate) {
-    const copy: EmailTemplate = { ...t, id: `custom-${Date.now()}`, name: t.name + ' (My Copy)', isPremade: false };
+    const editorState = resolveTemplateEditorState(t);
+    const copyCanvasStyle = cloneCanvasStyle(editorState.canvasStyle);
+    copyCanvasStyle.outerBgColor = '#ffffff';
+
+    const copy: EmailTemplate = {
+      ...t,
+      id: `custom-${Date.now()}`,
+      name: t.name + ' (My Copy)',
+      isPremade: false,
+      isHtml: true,
+      editorState: {
+        blocks: cloneBlocks(editorState.blocks),
+        canvasStyle: copyCanvasStyle,
+      },
+      body: generateEmailHtml(editorState.blocks, t.subject, copyCanvasStyle),
+    };
     setCustomTemplates(prev => [...prev, copy]);
     openEdit(copy);
     toast.success('Template copied! Now customize it in the designer.');
   }
 
-  function handleDesignerSave(name: string, category: string, subject: string, htmlBody: string) {
+  function handleDesignerSave(
+    name: string,
+    category: string,
+    subject: string,
+    htmlBody: string,
+    editorState: EmailTemplateEditorState,
+  ) {
     if (mode === 'create') {
-      const newT: EmailTemplate = { id: `custom-${Date.now()}`, name, category, subject, body: htmlBody, tags: [], isHtml: true };
+      const newT: EmailTemplate = { id: `custom-${Date.now()}`, name, category, subject, body: htmlBody, tags: [], isHtml: true, editorState };
       setCustomTemplates(prev => [...prev, newT]);
       toast.success('Template created! 🎉');
     } else if (editingTemplate) {
       if (editingTemplate.isPremade) { toast.error("Can't edit a pre-made template. Copy it first."); return; }
-      setCustomTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, name, category, subject, body: htmlBody, isHtml: true } : t));
+      setCustomTemplates(prev => prev.map(t => t.id === editingTemplate.id ? { ...t, name, category, subject, body: htmlBody, isHtml: true, editorState } : t));
       toast.success('Template updated!');
     }
     setMode('browse');
@@ -750,7 +977,18 @@ function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates
   }
 
   if (mode === 'create' || mode === 'edit') {
-    return <EmailDesigner initialMeta={designerMeta} initialBlocks={designerBlocks} mode={mode} editingName={editingTemplate?.name} onSave={handleDesignerSave} onCancel={() => setMode('browse')} />;
+    return (
+      <EmailDesigner
+        workspaceId={workspaceId}
+        initialMeta={designerMeta}
+        initialBlocks={designerBlocks}
+        initialCanvasStyle={designerCanvasStyle}
+        mode={mode}
+        editingName={editingTemplate?.name}
+        onSave={handleDesignerSave}
+        onCancel={() => setMode('browse')}
+      />
+    );
   }
 
   return (
@@ -811,7 +1049,7 @@ function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {filtered.filter(t => !t.isPremade).map(t => (
-              <TemplateCard key={t.id} template={t} onUse={() => openEdit(t)} onPreview={() => setPreviewingTemplate(t)} onDelete={() => handleDeleteTemplate(t.id)} useLabel="Open Designer" />
+              <TemplateCard key={t.id} template={t} onUse={() => openEdit(t)} onPreview={() => setPreviewingTemplate(t)} onDelete={() => handleDeleteTemplate(t.id)} useLabel="Edit Template" />
             ))}
           </div>
         )}
@@ -830,6 +1068,7 @@ function TemplatesTab({ customTemplates, setCustomTemplates }: { customTemplates
 
 function TemplateCard({ template, onUse, onPreview, onDelete, useLabel = 'Use Template' }: { template: EmailTemplate; onUse: () => void; onPreview: () => void; onDelete?: () => void; useLabel?: string }) {
   const catColors: Record<string, string> = { Welcome: 'bg-blue-50 text-blue-600', 'Follow-up': 'bg-violet-50 text-violet-600', Promotional: 'bg-amber-50 text-amber-600', 'Re-engagement': 'bg-rose-50 text-rose-600', Custom: 'bg-slate-100 text-slate-600' };
+  const isEditAction = /edit|designer/i.test(useLabel);
   return (
     <div className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-violet-200 hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
@@ -850,7 +1089,7 @@ function TemplateCard({ template, onUse, onPreview, onDelete, useLabel = 'Use Te
       <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100">
         <button onClick={onPreview} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"><Eye className="h-3 w-3" />Preview</button>
         <button onClick={onUse} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700">
-          {useLabel === 'Open Designer' ? <Edit3 className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{useLabel}
+          {isEditAction ? <Edit3 className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{useLabel}
         </button>
         {onDelete && <button onClick={onDelete} className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>}
       </div>
@@ -870,7 +1109,7 @@ function TemplatePreviewOverlay({ template, onClose, onUse }: { template: EmailT
           <div><p className="font-bold text-slate-900">{template.name}</p><p className="text-xs text-slate-500 mt-0.5">Email preview with sample data</p></div>
           <div className="flex items-center gap-2">
             <button onClick={onUse} className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700">
-              {template.isPremade ? <><Copy className="h-3.5 w-3.5" />Use Template</> : <><Edit3 className="h-3.5 w-3.5" />Open Designer</>}
+              {template.isPremade ? <><Copy className="h-3.5 w-3.5" />Use Template</> : <><Edit3 className="h-3.5 w-3.5" />Edit Template</>}
             </button>
             <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
           </div>
@@ -895,25 +1134,35 @@ function TemplatePreviewOverlay({ template, onClose, onUse }: { template: EmailT
    EMAIL DESIGNER — Main Component
 ══════════════════════════════════════════════════════════════════════════ */
 function EmailDesigner({
+  workspaceId,
   initialMeta,
   initialBlocks,
+  initialCanvasStyle,
   mode,
   editingName,
   onSave,
   onCancel,
 }: {
+  workspaceId: string;
   initialMeta: { name: string; category: string; subject: string };
   initialBlocks: EmailBlock[];
+  initialCanvasStyle: EmailCanvasStyle;
   mode: TemplateMode;
   editingName?: string;
-  onSave: (name: string, category: string, subject: string, htmlBody: string) => void;
+  onSave: (
+    name: string,
+    category: string,
+    subject: string,
+    htmlBody: string,
+    editorState: EmailTemplateEditorState,
+  ) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initialMeta.name);
   const [category, setCategory] = useState(initialMeta.category);
   const [subject, setSubject] = useState(initialMeta.subject);
   const [blocks, setBlocks] = useState<EmailBlock[]>(initialBlocks);
-  const [canvasStyle, setCanvasStyle] = useState<EmailCanvasStyle>(DEFAULT_CANVAS_STYLE);
+  const [canvasStyle, setCanvasStyle] = useState<EmailCanvasStyle>(cloneCanvasStyle(initialCanvasStyle));
   const [selectedId, setSelectedId] = useState<string | null>(initialBlocks[0]?.id ?? null);
   const [showPreview, setShowPreview] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -962,24 +1211,30 @@ function EmailDesigner({
     if (!subject.trim()) { setFormErr('Subject line is required.'); return; }
     if (blocks.length === 0) { setFormErr('Add at least one block to your email.'); return; }
     setFormErr(null);
-    onSave(name, category, subject, generateEmailHtml(blocks, subject, canvasStyle));
+    const editorState: EmailTemplateEditorState = {
+      blocks: cloneBlocks(blocks),
+      canvasStyle: cloneCanvasStyle(canvasStyle),
+    };
+    onSave(name, category, subject, generateEmailHtml(blocks, subject, canvasStyle), editorState);
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {/* Top bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={onCancel} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">← Back</button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-slate-800">{mode === 'create' ? '🎨 Design New Email Template' : `🎨 Editing: ${editingName}`}</h2>
-          <p className="text-xs text-slate-500">Build your email block by block — what you design is exactly what clients receive</p>
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-white to-slate-50 p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={onCancel} className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">← Back</button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold text-slate-800">{mode === 'create' ? '🎨 Design New Email Template' : `🎨 Editing: ${editingName}`}</h2>
+            <p className="text-sm text-slate-500">Build your email block by block. The preview mirrors what recipients receive.</p>
+          </div>
+          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-100 transition">
+            <Eye className="h-4 w-4" />Preview
+          </button>
+          <button onClick={handleSave} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 shadow-sm transition active:scale-95">
+            <Save className="h-4 w-4" />Save Template
+          </button>
         </div>
-        <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100 transition">
-          <Eye className="h-4 w-4" />Preview
-        </button>
-        <button onClick={handleSave} className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 shadow-sm transition active:scale-95">
-          <Save className="h-4 w-4" />Save Template
-        </button>
       </div>
 
       {formErr && (
@@ -990,44 +1245,44 @@ function EmailDesigner({
       )}
 
       {/* Three-column editor */}
-      <div className="flex gap-3" style={{ minHeight: 640 }}>
+      <div className="grid gap-4 xl:grid-cols-[290px_minmax(0,1fr)_320px]" style={{ minHeight: 700 }}>
 
         {/* ── Left: Palette + Settings ── */}
-        <div className="w-44 shrink-0 flex flex-col gap-2">
+        <div className="flex flex-col gap-3 xl:max-h-[calc(100vh-250px)] xl:overflow-y-auto pr-1">
           {/* Template settings */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Template Info</p>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Template name *" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:border-violet-400 focus:outline-none" />
-            <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject *" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:border-violet-400 focus:outline-none" />
-            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:border-violet-400 focus:outline-none">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Template Info</p>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Template name *" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+            <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject *" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+            <select value={category} onChange={e => setCategory(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none">
               {['Welcome', 'Follow-up', 'Promotional', 'Re-engagement', 'Custom'].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <div className="pt-2 border-t border-slate-100 space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Canvas Style</p>
-              <label className="block text-[10px] font-semibold text-slate-500">Outer Background</label>
+            <div className="pt-3 border-t border-slate-100 space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Canvas Style</p>
+              <label className="block text-[11px] font-semibold text-slate-500">Outer Background</label>
               <ColorPicker value={canvasStyle.outerBgColor} onChange={v => setCanvasStyle(prev => ({ ...prev, outerBgColor: v }))} />
-              <label className="block text-[10px] font-semibold text-slate-500">Card Background</label>
+              <label className="block text-[11px] font-semibold text-slate-500">Card Background</label>
               <ColorPicker value={canvasStyle.containerBgColor} onChange={v => setCanvasStyle(prev => ({ ...prev, containerBgColor: v }))} />
-              <label className="block text-[10px] font-semibold text-slate-500">Card Width: {canvasStyle.containerWidth}px</label>
+              <label className="block text-[11px] font-semibold text-slate-500">Card Width: {canvasStyle.containerWidth}px</label>
               <input type="range" min={480} max={700} step={10} value={canvasStyle.containerWidth} onChange={e => setCanvasStyle(prev => ({ ...prev, containerWidth: +e.target.value }))} className="w-full accent-violet-600" />
-              <label className="block text-[10px] font-semibold text-slate-500">Corner Radius: {canvasStyle.containerRadius}px</label>
+              <label className="block text-[11px] font-semibold text-slate-500">Corner Radius: {canvasStyle.containerRadius}px</label>
               <input type="range" min={0} max={26} step={1} value={canvasStyle.containerRadius} onChange={e => setCanvasStyle(prev => ({ ...prev, containerRadius: +e.target.value }))} className="w-full accent-violet-600" />
-              <label className="block text-[10px] font-semibold text-slate-500">Shadow: {canvasStyle.shadowBlur}px</label>
+              <label className="block text-[11px] font-semibold text-slate-500">Shadow: {canvasStyle.shadowBlur}px</label>
               <input type="range" min={0} max={36} step={2} value={canvasStyle.shadowBlur} onChange={e => setCanvasStyle(prev => ({ ...prev, shadowBlur: +e.target.value }))} className="w-full accent-violet-600" />
-              <label className="block text-[10px] font-semibold text-slate-500">Base Font</label>
-              <select value={canvasStyle.baseFont} onChange={e => setCanvasStyle(prev => ({ ...prev, baseFont: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] focus:border-violet-400 focus:outline-none">
+              <label className="block text-[11px] font-semibold text-slate-500">Base Font</label>
+              <select value={canvasStyle.baseFont} onChange={e => setCanvasStyle(prev => ({ ...prev, baseFont: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none">
                 {CANVAS_FONT_OPTIONS.map(opt => <option key={opt.label} value={opt.value}>{opt.label}</option>)}
               </select>
             </div>
           </div>
 
           {/* Block palette */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Add Blocks</p>
-            <div className="space-y-1.5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2.5">Add Blocks</p>
+            <div className="space-y-2">
               {BLOCK_ITEMS.map(({ type, label, emoji, desc }) => (
                 <button key={type} onClick={() => addBlock(type)} title={desc}
-                  className="w-full flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700">
+                  className="w-full flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700">
                   <span className="text-sm">{emoji}</span>{label}
                 </button>
               ))}
@@ -1036,10 +1291,10 @@ function EmailDesigner({
         </div>
 
         {/* ── Center: Email Canvas ── */}
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="rounded-2xl border border-slate-200 bg-slate-200 p-3 flex-1 overflow-y-auto" style={{ minHeight: 500 }}>
+        <div className="min-w-0 flex flex-col gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-100 p-4 sm:p-5 flex-1 overflow-y-auto" style={{ minHeight: 540 }}>
             <div
-              className="mx-auto overflow-hidden"
+              className="mx-auto overflow-hidden border border-slate-200"
               style={{
                 maxWidth: Math.max(420, canvasStyle.containerWidth - 40),
                 background: canvasStyle.containerBgColor,
@@ -1076,15 +1331,20 @@ function EmailDesigner({
               )}
             </div>
           </div>
-          <p className="text-center text-[11px] text-slate-400">Click any block to select → edit properties on the right panel</p>
+          <p className="text-center text-xs text-slate-500">Click a block to edit it in the right panel.</p>
         </div>
 
         {/* ── Right: Properties Panel ── */}
-        <div className="w-64 shrink-0 overflow-y-auto" style={{ maxHeight: 640 }}>
+        <div className="xl:max-h-[calc(100vh-250px)] xl:overflow-y-auto pl-1">
           {selectedBlock ? (
-            <BlockPropertiesPanel key={selectedBlock.id} block={selectedBlock} onChange={patch => updateBlock(selectedBlock.id, patch)} />
+            <BlockPropertiesPanel
+              key={selectedBlock.id}
+              workspaceId={workspaceId}
+              block={selectedBlock}
+              onChange={patch => updateBlock(selectedBlock.id, patch)}
+            />
           ) : (
-            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 h-full flex flex-col items-center justify-center py-10 text-center">
+            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 h-full flex flex-col items-center justify-center py-12 text-center">
               <p className="text-3xl mb-2">👈</p>
               <p className="text-sm font-semibold text-slate-600">Click a block</p>
               <p className="text-xs text-slate-400 mt-1">to edit its properties here</p>
@@ -1103,15 +1363,17 @@ function EmailDesigner({
 /* ── Block canvas preview ─────────────────────────────────────────────── */
 function BlockCanvasPreview({ block }: { block: EmailBlock }) {
   switch (block.type) {
-    case 'header':
+    case 'header': {
+      const logoUrl = sanitizeEmailImageUrl(block.imageUrl);
       return (
         <div style={{ background: block.bgColor, padding: `${block.padding}px 30px`, textAlign: 'center' }}>
-          {block.imageUrl
-            ? <img src={block.imageUrl} alt={block.logoText} style={{ maxHeight: 56, maxWidth: 200, display: 'inline-block' }} />
+          {logoUrl
+            ? <img src={logoUrl} alt={block.logoText} style={{ maxHeight: 56, maxWidth: 200, display: 'inline-block' }} />
             : <div style={{ fontSize: 22, fontWeight: 800, color: block.logoColor, letterSpacing: '-0.5px' }}>{block.logoText || 'Your Brand'}</div>
           }
         </div>
       );
+    }
     case 'text':
       return (
         <div
@@ -1124,16 +1386,18 @@ function BlockCanvasPreview({ block }: { block: EmailBlock }) {
           dangerouslySetInnerHTML={{ __html: block.html || '<p style="color:#aaa;margin:0;">Click to edit text...</p>' }}
         />
       );
-    case 'image':
+    case 'image': {
+      const imageUrl = sanitizeEmailImageUrl(block.imageUrl);
       return (
         <div style={{ background: block.bgColor, padding: `${block.padding}px 30px`, textAlign: block.align }}>
-          {block.imageUrl
-            ? <img src={block.imageUrl} alt={block.altText} style={{ width: `${block.width}%`, maxWidth: `${block.width}%`, height: 'auto', display: 'inline-block', borderRadius: block.borderRadius, boxShadow: block.shadow ? '0 10px 24px rgba(15,23,42,0.24)' : 'none' }} />
-            : <div style={{ background: '#f0f0f0', height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 13, borderRadius: 6 }}>🖼 Add image URL or upload</div>
+          {imageUrl
+            ? <img src={imageUrl} alt={block.altText} style={{ width: `${block.width}%`, maxWidth: `${block.width}%`, height: 'auto', display: 'inline-block', borderRadius: block.borderRadius, boxShadow: block.shadow ? '0 10px 24px rgba(15,23,42,0.24)' : 'none' }} />
+            : <div style={{ background: '#f0f0f0', height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 13, borderRadius: 6 }}>🖼 Add a public image URL or upload</div>
           }
           {block.caption && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#777', textAlign: block.align }}>{block.caption}</p>}
         </div>
       );
+    }
     case 'button':
       return (
         <div style={{ padding: '16px 30px', textAlign: block.align }}>
@@ -1152,39 +1416,47 @@ function BlockCanvasPreview({ block }: { block: EmailBlock }) {
 }
 
 /* ── Block properties panel ───────────────────────────────────────────── */
-function BlockPropertiesPanel({ block, onChange }: { block: EmailBlock; onChange: (patch: Partial<EmailBlock>) => void }) {
+function BlockPropertiesPanel({
+  workspaceId,
+  block,
+  onChange,
+}: {
+  workspaceId: string;
+  block: EmailBlock;
+  onChange: (patch: Partial<EmailBlock>) => void;
+}) {
   const emojis: Record<BlockType, string> = { header: '🏷', text: '✏️', image: '🖼', button: '🔘', divider: '➖', spacer: '↕️', footer: '📄' };
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 bg-slate-50">
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50">
         <span className="text-base">{emojis[block.type]}</span>
         <p className="text-xs font-bold uppercase tracking-widest text-slate-500 capitalize">{block.type} Block Settings</p>
       </div>
-      <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 580 }}>
-        {block.type === 'header'  && <HeaderProps  block={block} onChange={onChange as (p: Partial<HeaderBlockData>) => void} />}
-        {block.type === 'text'    && <TextProps    block={block} onChange={onChange as (p: Partial<TextBlockData>) => void} />}
-        {block.type === 'image'   && <ImageProps   block={block} onChange={onChange as (p: Partial<ImageBlockData>) => void} />}
+      <div className="p-4 space-y-4 overflow-y-auto" style={{ maxHeight: 620 }}>
+        {block.type === 'header'  && <HeaderProps workspaceId={workspaceId} block={block} onChange={onChange as (p: Partial<HeaderBlockData>) => void} />}
+        {block.type === 'text'    && <TextProps workspaceId={workspaceId} block={block} onChange={onChange as (p: Partial<TextBlockData>) => void} />}
+        {block.type === 'image'   && <ImageProps workspaceId={workspaceId} block={block} onChange={onChange as (p: Partial<ImageBlockData>) => void} />}
         {block.type === 'button'  && <ButtonProps  block={block} onChange={onChange as (p: Partial<ButtonBlockData>) => void} />}
         {block.type === 'divider' && <DividerProps block={block} onChange={onChange as (p: Partial<DividerBlockData>) => void} />}
         {block.type === 'spacer'  && <SpacerProps  block={block} onChange={onChange as (p: Partial<SpacerBlockData>) => void} />}
-        {block.type === 'footer'  && <FooterProps  block={block} onChange={onChange as (p: Partial<FooterBlockData>) => void} />}
+        {block.type === 'footer'  && <FooterProps workspaceId={workspaceId} block={block} onChange={onChange as (p: Partial<FooterBlockData>) => void} />}
       </div>
     </div>
   );
 }
 
 /* ─── shared design panel helpers ────────────────────────────────────── */
-const piCls = 'w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-100';
+const piCls = 'w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-100';
 
 function DP({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>{children}</div>;
+  return <div className="space-y-1.5"><p className="text-[11px] font-semibold text-slate-500">{label}</p>{children}</div>;
 }
 
 function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex items-center gap-2">
-      <input type="color" value={value} onChange={e => onChange(e.target.value)} className="h-8 w-10 rounded-lg border border-slate-200 cursor-pointer p-0.5" />
-      <input type="text" value={value} onChange={e => onChange(e.target.value)} className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-mono focus:border-violet-400 focus:outline-none" />
+      <input type="color" value={value} onChange={e => onChange(e.target.value)} className="h-9 w-11 rounded-xl border border-slate-200 cursor-pointer p-0.5" />
+      <input type="text" value={value} onChange={e => onChange(e.target.value)} className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono focus:border-violet-400 focus:outline-none" />
     </div>
   );
 }
@@ -1202,14 +1474,46 @@ function AlignPicker({ value, onChange }: { value: 'left'|'center'|'right'; onCh
 }
 
 /* ─── Header block props ─────────────────────────────────────────────── */
-function HeaderProps({ block, onChange }: { block: HeaderBlockData; onChange: (p: Partial<HeaderBlockData>) => void }) {
+function HeaderProps({
+  workspaceId,
+  block,
+  onChange,
+}: {
+  workspaceId: string;
+  block: HeaderBlockData;
+  onChange: (p: Partial<HeaderBlockData>) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  async function handleUploadLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const uploaded = await uploadAsset(workspaceId, file, 'image', true);
+      onChange({ imageUrl: uploaded.public_url, logoText: block.logoText || uploaded.name });
+      toast.success('Logo uploaded and linked.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Logo upload failed.');
+    } finally {
+      setUploadingLogo(false);
+      event.target.value = '';
+    }
+  }
+
   return (<>
     <DP label="Brand / Logo Text"><input type="text" value={block.logoText} onChange={e => onChange({ logoText: e.target.value })} className={piCls} /></DP>
     <DP label="Text Color"><ColorPicker value={block.logoColor} onChange={v => onChange({ logoColor: v })} /></DP>
     <DP label="Background Color"><ColorPicker value={block.bgColor} onChange={v => onChange({ bgColor: v })} /></DP>
     <DP label="Logo Image URL (optional)">
       <input type="url" value={block.imageUrl ?? ''} onChange={e => onChange({ imageUrl: e.target.value || undefined })} placeholder="https://your-logo.png" className={piCls} />
-      <p className="text-[10px] text-slate-400 mt-0.5">Paste a URL to show your logo image instead of text</p>
+      <p className="text-[10px] text-slate-400 mt-0.5">Use a public HTTPS URL. Local/data/blob URLs will not render in recipient inboxes.</p>
+      <input ref={fileRef} type="file" accept="image/*" onChange={handleUploadLogo} className="hidden" />
+      <button onClick={() => fileRef.current?.click()} disabled={uploadingLogo} className="mt-1 w-full rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-60">
+        {uploadingLogo ? 'Uploading logo…' : 'Upload Logo'}
+      </button>
     </DP>
     <DP label="Padding (px)">
       <input type="range" value={block.padding} onChange={e => onChange({ padding: +e.target.value })} min={8} max={60} className="w-full accent-violet-600" />
@@ -1219,8 +1523,18 @@ function HeaderProps({ block, onChange }: { block: HeaderBlockData; onChange: (p
 }
 
 /* ─── Text block props (full rich editor) ────────────────────────────── */
-function TextProps({ block, onChange }: { block: TextBlockData; onChange: (p: Partial<TextBlockData>) => void }) {
+function TextProps({
+  workspaceId,
+  block,
+  onChange,
+}: {
+  workspaceId: string;
+  block: TextBlockData;
+  onChange: (p: Partial<TextBlockData>) => void;
+}) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const docRef = useRef<HTMLInputElement>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   useEffect(() => {
     if (editorRef.current) editorRef.current.innerHTML = block.html;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1230,6 +1544,23 @@ function TextProps({ block, onChange }: { block: TextBlockData; onChange: (p: Pa
     editorRef.current?.focus();
     document.execCommand(cmd, false, val);
     if (editorRef.current) onChange({ html: editorRef.current.innerHTML });
+  }
+
+  async function handleInsertDocument(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDoc(true);
+    try {
+      const uploaded = await uploadAsset(workspaceId, file, 'document', false);
+      exec('insertHTML', `<a href="${uploaded.public_url}" target="_blank" rel="noopener noreferrer">${uploaded.name}</a>`);
+      toast.success('Document uploaded and linked.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Document upload failed.');
+    } finally {
+      setUploadingDoc(false);
+      event.target.value = '';
+    }
   }
 
   return (<>
@@ -1274,9 +1605,14 @@ function TextProps({ block, onChange }: { block: TextBlockData; onChange: (p: Pa
         <div className="w-px h-5 bg-slate-200 mx-0.5 self-center" />
         {/* Link */}
         <button onMouseDown={e => { e.preventDefault(); const url = prompt('Enter URL:'); if (url) exec('createLink', url); }} title="Insert link" className="w-7 h-7 flex items-center justify-center rounded-lg text-xs text-slate-600 hover:bg-white hover:shadow-sm">🔗</button>
+        <button onMouseDown={e => { e.preventDefault(); docRef.current?.click(); }} title="Upload document and insert link" className="px-2 h-7 flex items-center justify-center rounded-lg text-[10px] font-bold text-slate-600 hover:bg-white hover:shadow-sm border border-slate-200">
+          DOC
+        </button>
         {/* Remove format */}
         <button onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title="Clear formatting" className="w-7 h-7 flex items-center justify-center rounded-lg text-[10px] text-red-400 hover:bg-white hover:shadow-sm">✕</button>
       </div>
+      <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleInsertDocument} className="hidden" />
+      {uploadingDoc && <p className="mb-1 text-[10px] font-semibold text-violet-600">Uploading document…</p>}
       {/* Variables quick-insert */}
       <div className="flex flex-wrap gap-1 mb-1.5">
         {TEMPLATE_VARIABLES.slice(0, 4).map(v => (
@@ -1307,24 +1643,44 @@ function TextProps({ block, onChange }: { block: TextBlockData; onChange: (p: Pa
 }
 
 /* ─── Image block props ───────────────────────────────────────────────── */
-function ImageProps({ block, onChange }: { block: ImageBlockData; onChange: (p: Partial<ImageBlockData>) => void }) {
+function ImageProps({
+  workspaceId,
+  block,
+  onChange,
+}: {
+  workspaceId: string;
+  block: ImageBlockData;
+  onChange: (p: Partial<ImageBlockData>) => void;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
-  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => onChange({ imageUrl: reader.result as string });
-    reader.readAsDataURL(file);
+
+    setUploadingImage(true);
+    try {
+      const uploaded = await uploadAsset(workspaceId, file, 'image', false);
+      onChange({ imageUrl: uploaded.public_url, altText: block.altText || uploaded.name });
+      toast.success('Image uploaded and linked.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Image upload failed.');
+    } finally {
+      setUploadingImage(false);
+      event.target.value = '';
+    }
   }
+
   return (<>
     <DP label="Image URL">
       <input type="url" value={block.imageUrl} onChange={e => onChange({ imageUrl: e.target.value })} placeholder="https://example.com/image.jpg" className={piCls} />
     </DP>
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">— or upload from device —</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">— or upload (recommended) —</p>
       <input ref={fileRef} type="file" accept="image/*" onChange={handleUpload} className="hidden" />
-      <button onClick={() => fileRef.current?.click()} className="w-full rounded-xl border-2 border-dashed border-violet-200 py-2.5 text-xs font-semibold text-violet-600 hover:border-violet-400 hover:bg-violet-50 transition">
-        📁 Upload Image File
+      <button onClick={() => fileRef.current?.click()} disabled={uploadingImage} className="w-full rounded-xl border-2 border-dashed border-violet-200 py-2.5 text-xs font-semibold text-violet-600 hover:border-violet-400 hover:bg-violet-50 transition disabled:opacity-60">
+        {uploadingImage ? 'Uploading Image…' : '📁 Upload Image File'}
       </button>
     </div>
     {block.imageUrl && (
@@ -1423,13 +1779,41 @@ function SpacerProps({ block, onChange }: { block: SpacerBlockData; onChange: (p
 }
 
 /* ─── Footer block props ─────────────────────────────────────────────── */
-function FooterProps({ block, onChange }: { block: FooterBlockData; onChange: (p: Partial<FooterBlockData>) => void }) {
+function FooterProps({
+  workspaceId,
+  block,
+  onChange,
+}: {
+  workspaceId: string;
+  block: FooterBlockData;
+  onChange: (p: Partial<FooterBlockData>) => void;
+}) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const docRef = useRef<HTMLInputElement>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   useEffect(() => { if (editorRef.current) editorRef.current.innerHTML = block.html; }, [block.id]);
   function exec(cmd: string, val?: string) {
     editorRef.current?.focus(); document.execCommand(cmd, false, val);
     if (editorRef.current) onChange({ html: editorRef.current.innerHTML });
   }
+
+  async function handleInsertDocument(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDoc(true);
+    try {
+      const uploaded = await uploadAsset(workspaceId, file, 'document', false);
+      exec('insertHTML', `<a href="${uploaded.public_url}" target="_blank" rel="noopener noreferrer">${uploaded.name}</a>`);
+      toast.success('Document uploaded and linked.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Document upload failed.');
+    } finally {
+      setUploadingDoc(false);
+      event.target.value = '';
+    }
+  }
+
   return (<>
     <DP label="Footer Content">
       <div className="flex gap-1 mb-1">
@@ -1437,7 +1821,10 @@ function FooterProps({ block, onChange }: { block: FooterBlockData; onChange: (p
           <button key={cmd} onMouseDown={e => { e.preventDefault(); exec(cmd); }} className="w-7 h-7 flex items-center justify-center rounded border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">{label}</button>
         ))}
         <button onMouseDown={e => { e.preventDefault(); const url = prompt('Link URL:'); if (url) exec('createLink', url); }} className="px-2 h-7 flex items-center rounded border border-slate-200 text-xs text-slate-600 hover:bg-slate-50">🔗 Link</button>
+        <button onMouseDown={e => { e.preventDefault(); docRef.current?.click(); }} className="px-2 h-7 flex items-center rounded border border-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-50">DOC</button>
       </div>
+      <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleInsertDocument} className="hidden" />
+      {uploadingDoc && <p className="mb-1 text-[10px] font-semibold text-violet-600">Uploading document…</p>}
       <div
         ref={editorRef} contentEditable suppressContentEditableWarning
         onInput={() => { if (editorRef.current) onChange({ html: editorRef.current.innerHTML }); }}
