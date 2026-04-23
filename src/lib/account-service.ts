@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
+import type { CRMType } from './types';
 import { getSupabaseClient } from './supabaseClient';
 
 export type EmailSenderProvider = 'google' | 'microsoft' | 'smtp';
@@ -11,6 +12,9 @@ export interface AccountProfile {
 
 export interface AccountWorkspace {
   id: string;
+  name: string;
+  slug: string;
+  crm_type: CRMType;
   role: string;
   can_manage: boolean;
 }
@@ -62,6 +66,11 @@ export interface AccountSettingsUpdatePayload {
   workspace_id: string;
   profile?: {
     full_name?: string;
+  };
+  workspace?: {
+    name?: string;
+    slug?: string;
+    crm_type?: CRMType;
   };
   sender?: {
     id?: string;

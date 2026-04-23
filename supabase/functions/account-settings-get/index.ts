@@ -11,6 +11,10 @@ function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function canManageWorkspace(role: string) {
+  return role === 'owner' || role === 'admin';
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -59,7 +63,7 @@ Deno.serve(async (request) => {
     }
 
     const membership = await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
-    const canManage = true;
+    const canManage = canManageWorkspace(membership.role);
 
     // Initialize defaults (idempotent, skip gracefully if schema not cached yet)
     try {
@@ -69,11 +73,16 @@ Deno.serve(async (request) => {
       if (!msg.includes('Could not find')) throw err;
     }
 
-    const [{ data: profile, error: profileError }, senders, automation, sequenceSteps] = await Promise.all([
+    const [{ data: profile, error: profileError }, { data: workspace, error: workspaceError }, senders, automation, sequenceSteps] = await Promise.all([
       authContext.serviceClient
         .from('profiles')
         .select('id, full_name')
         .eq('id', authContext.user.id)
+        .maybeSingle(),
+      authContext.serviceClient
+        .from('workspaces')
+        .select('id, name, slug, crm_type')
+        .eq('id', workspaceId)
         .maybeSingle(),
       listWorkspaceEmailSenders(authContext.serviceClient, workspaceId),
       getWorkspaceAutomationSettings(authContext.serviceClient, workspaceId),
@@ -84,6 +93,14 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: profileError.message }, 400);
     }
 
+    if (workspaceError) {
+      return jsonResponse({ error: workspaceError.message }, 400);
+    }
+
+    if (!workspace) {
+      return jsonResponse({ error: 'Workspace not found.' }, 404);
+    }
+
     return jsonResponse({
       profile: {
         id: authContext.user.id,
@@ -92,6 +109,9 @@ Deno.serve(async (request) => {
       },
       workspace: {
         id: workspaceId,
+        name: workspace.name,
+        slug: workspace.slug,
+        crm_type: workspace.crm_type,
         role: membership.role,
         can_manage: canManage,
       },

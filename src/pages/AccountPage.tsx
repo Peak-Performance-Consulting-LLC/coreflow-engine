@@ -1,6 +1,6 @@
-import { Mail, RefreshCw, ShieldCheck } from 'lucide-react';
+import { BriefcaseBusiness, Lock, RefreshCw, Settings2, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
@@ -8,122 +8,134 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
+import { crmOptions } from '../lib/constants';
 import {
   getAccountSettings,
-  startEmailOAuth,
   updateAccountSettings,
   type AccountSettingsResponse,
-  type WorkspaceEmailSender,
-  type WorkspaceEmailSequenceStep,
 } from '../lib/account-service';
+import type { CRMType } from '../lib/types';
+import { isValidWorkspaceSlug, slugify } from '../lib/utils';
 
-interface EditableStep {
-  step_order: number;
-  delay_hours: number;
-  subject_template: string;
-  body_template: string;
-  is_active: boolean;
+type DateFormatOption = 'dd/mm/yyyy' | 'mm/dd/yyyy' | 'yyyy-mm-dd';
+type LandingPageOption = '/dashboard' | '/records' | '/imports' | '/email' | '/account';
+
+interface AccountPreferences {
+  timezone: string;
+  dateFormat: DateFormatOption;
+  landingPage: LandingPageOption;
 }
 
-function mapSteps(steps: WorkspaceEmailSequenceStep[]): EditableStep[] {
-  if (steps.length === 0) {
-    return [
-      {
-        step_order: 1,
-        delay_hours: 0,
-        subject_template: 'Quick follow-up from {{workspace_name}}',
-        body_template:
-          'Hi {{lead_full_name}},\n\nThanks for your interest. We wanted to quickly follow up and see how we can help.\n\nBest,\n{{sender_name}}',
-        is_active: true,
-      },
-      {
-        step_order: 2,
-        delay_hours: 48,
-        subject_template: 'Checking in on your request',
-        body_template:
-          'Hi {{lead_full_name}},\n\nJust checking in regarding your request. If you are available, reply here and we can continue.\n\nBest,\n{{sender_name}}',
-        is_active: true,
-      },
-      {
-        step_order: 3,
-        delay_hours: 120,
-        subject_template: 'Final follow-up',
-        body_template:
-          'Hi {{lead_full_name}},\n\nThis is a final follow-up from {{workspace_name}}. If timing is not right, no problem. We are here when you are ready.\n\nBest,\n{{sender_name}}',
-        is_active: true,
-      },
-    ];
-  }
+const TIMEZONE_OPTIONS = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Asia/Kolkata',
+  'Asia/Dubai',
+  'Australia/Sydney',
+];
 
-  return [...steps]
-    .sort((left, right) => left.step_order - right.step_order)
-    .map((step) => ({
-      step_order: step.step_order,
-      delay_hours: step.delay_hours,
-      subject_template: step.subject_template,
-      body_template: step.body_template,
-      is_active: step.is_active,
-    }));
+const INPUT_CLASSES =
+  'h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900';
+const READ_ONLY_INPUT_CLASSES =
+  'h-11 rounded-xl border border-slate-300 bg-slate-50 px-3.5 text-sm text-slate-600';
+
+function getDefaultTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }
 
-function formatSenderStatus(sender: WorkspaceEmailSender) {
-  if (sender.status === 'connected') {
-    return sender.health_status === 'healthy' ? 'Connected' : `Connected (${sender.health_status})`;
+function getDefaultPreferences(): AccountPreferences {
+  return {
+    timezone: getDefaultTimezone(),
+    dateFormat: 'dd/mm/yyyy',
+    landingPage: '/dashboard',
+  };
+}
+
+function getPreferencesStorageKey(userId: string, workspaceId: string) {
+  return `coreflow.account.preferences.${userId}.${workspaceId}`;
+}
+
+function formatRole(role: string | null | undefined) {
+  if (!role) {
+    return 'Member';
   }
 
-  if (sender.status === 'pending') {
-    return 'Pending OAuth';
+  return role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatProvider(provider: string) {
+  if (!provider) {
+    return 'Email';
   }
 
-  return sender.status;
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return 'Not available';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Not available';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(parsed);
 }
 
 export function AccountPage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { session, workspace, signOut } = useAuth();
+  const { session, user, workspace, refreshWorkspace, signOut } = useAuth();
   const [settings, setSettings] = useState<AccountSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [savingAutomation, setSavingAutomation] = useState(false);
-  const [savingSmtp, setSavingSmtp] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<'google' | 'microsoft' | null>(null);
-  const [senderActionLoadingId, setSenderActionLoadingId] = useState<string | null>(null);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const [profileName, setProfileName] = useState('');
-  const [automationEnabled, setAutomationEnabled] = useState(false);
-  const [automationTimezone, setAutomationTimezone] = useState('UTC');
-  const [steps, setSteps] = useState<EditableStep[]>([]);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceSlug, setWorkspaceSlug] = useState('');
+  const [workspaceCrmType, setWorkspaceCrmType] = useState<CRMType>('real-estate');
+  const [preferences, setPreferences] = useState<AccountPreferences>(getDefaultPreferences);
 
-  const [smtpSenderId, setSmtpSenderId] = useState<string | null>(null);
-  const [smtpEmail, setSmtpEmail] = useState('');
-  const [smtpName, setSmtpName] = useState('');
-  const [smtpHost, setSmtpHost] = useState('');
-  const [smtpPort, setSmtpPort] = useState(587);
-  const [smtpUsername, setSmtpUsername] = useState('');
-  const [smtpPassword, setSmtpPassword] = useState('');
-  const [smtpTls, setSmtpTls] = useState(true);
-  const [smtpDefault, setSmtpDefault] = useState(false);
+  const authProviders = useMemo(() => {
+    const rawProviders = user?.app_metadata?.providers;
+    if (Array.isArray(rawProviders) && rawProviders.length > 0) {
+      return rawProviders.map((provider) => formatProvider(String(provider)));
+    }
 
-  const canManage = Boolean(settings?.workspace.can_manage);
+    const singleProvider = user?.app_metadata?.provider;
+    if (typeof singleProvider === 'string' && singleProvider.length > 0) {
+      return [formatProvider(singleProvider)];
+    }
+
+    return ['Email'];
+  }, [user?.app_metadata?.provider, user?.app_metadata?.providers]);
 
   function applySettings(nextSettings: AccountSettingsResponse) {
     setSettings(nextSettings);
     setProfileName(nextSettings.profile.full_name ?? '');
-    setAutomationEnabled(nextSettings.automation.is_enabled);
-    setAutomationTimezone(nextSettings.automation.timezone || 'UTC');
-    setSteps(mapSteps(nextSettings.sequence_steps));
-
-    const smtp = nextSettings.senders.find((sender) => sender.provider === 'smtp') ?? null;
-    setSmtpSenderId(smtp?.id ?? null);
-    setSmtpEmail(smtp?.sender_email ?? '');
-    setSmtpName(smtp?.sender_name ?? '');
-    setSmtpHost(smtp?.smtp_host ?? '');
-    setSmtpPort(smtp?.smtp_port ?? 587);
-    setSmtpUsername(smtp?.smtp_username ?? '');
-    setSmtpPassword('');
-    setSmtpTls(smtp?.smtp_use_tls ?? true);
-    setSmtpDefault(Boolean(smtp?.is_default));
+    setWorkspaceName(nextSettings.workspace.name);
+    setWorkspaceSlug(nextSettings.workspace.slug);
+    setWorkspaceCrmType(nextSettings.workspace.crm_type);
   }
 
   async function loadSettings() {
@@ -153,23 +165,45 @@ export function AccountPage() {
   }, [session, workspace]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const oauthStatus = params.get('oauth_status');
-
-    if (!oauthStatus) {
+    if (!session || !workspace || typeof window === 'undefined') {
       return;
     }
 
-    if (oauthStatus === 'success') {
-      toast.success('Email provider connected successfully.');
-    } else {
-      const message = params.get('oauth_message') || 'Unable to connect email provider.';
-      toast.error(message);
+    const defaults = getDefaultPreferences();
+    const storageKey = getPreferencesStorageKey(session.user.id, workspace.id);
+    const storedValue = window.localStorage.getItem(storageKey);
+
+    if (!storedValue) {
+      setPreferences(defaults);
+      return;
     }
 
-    navigate('/account', { replace: true });
-    void loadSettings();
-  }, [location.search, navigate]);
+    try {
+      const parsed = JSON.parse(storedValue) as Partial<AccountPreferences>;
+      setPreferences({
+        timezone:
+          typeof parsed.timezone === 'string' && TIMEZONE_OPTIONS.includes(parsed.timezone)
+            ? parsed.timezone
+            : defaults.timezone,
+        dateFormat:
+          parsed.dateFormat === 'dd/mm/yyyy' ||
+          parsed.dateFormat === 'mm/dd/yyyy' ||
+          parsed.dateFormat === 'yyyy-mm-dd'
+            ? parsed.dateFormat
+            : defaults.dateFormat,
+        landingPage:
+          parsed.landingPage === '/dashboard' ||
+          parsed.landingPage === '/records' ||
+          parsed.landingPage === '/imports' ||
+          parsed.landingPage === '/email' ||
+          parsed.landingPage === '/account'
+            ? parsed.landingPage
+            : defaults.landingPage,
+      });
+    } catch {
+      setPreferences(defaults);
+    }
+  }, [session, workspace]);
 
   async function handleSignOut() {
     await signOut();
@@ -207,153 +241,69 @@ export function AccountPage() {
     }
   }
 
-  async function handleConnectOAuth(provider: 'google' | 'microsoft') {
+  async function handleSaveWorkspace() {
     if (!session || !workspace) {
       return;
     }
 
-    setOauthLoading(provider);
-
-    try {
-      const response = await startEmailOAuth(session, {
-        workspace_id: workspace.id,
-        provider,
-        return_path: '/account',
-      });
-
-      window.location.href = response.authorize_url;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to start OAuth flow.';
-      toast.error(message);
-      setOauthLoading(null);
-    }
-  }
-
-  async function handleSaveSmtpSender() {
-    if (!session || !workspace) {
+    if (!settings?.workspace.can_manage) {
+      toast.error('Only workspace owners or admins can update workspace settings.');
       return;
     }
 
-    if (!smtpEmail.trim() || !smtpHost.trim() || !smtpUsername.trim()) {
-      toast.error('SMTP sender requires sender email, host, and username.');
+    const trimmedName = workspaceName.trim();
+    const trimmedSlug = workspaceSlug.trim();
+
+    if (trimmedName.length < 2) {
+      toast.error('Workspace name must be at least 2 characters.');
       return;
     }
 
-    if (!smtpSenderId && !smtpPassword.trim()) {
-      toast.error('SMTP password is required when creating a sender.');
+    if (!isValidWorkspaceSlug(trimmedSlug)) {
+      toast.error('Workspace slug must use 3+ lowercase letters, numbers, and hyphens only.');
       return;
     }
 
-    if (Number.isNaN(smtpPort) || smtpPort <= 0) {
-      toast.error('SMTP port must be a valid positive number.');
-      return;
-    }
-
-    setSavingSmtp(true);
+    setSavingWorkspace(true);
 
     try {
       const response = await updateAccountSettings(session, {
         workspace_id: workspace.id,
-        sender: {
-          id: smtpSenderId ?? undefined,
-          provider: 'smtp',
-          sender_email: smtpEmail.trim().toLowerCase(),
-          sender_name: smtpName.trim() || null,
-          is_active: true,
-          is_default: smtpDefault,
-          smtp: {
-            host: smtpHost.trim(),
-            port: smtpPort,
-            username: smtpUsername.trim(),
-            password: smtpPassword.trim() || undefined,
-            use_tls: smtpTls,
-          },
+        workspace: {
+          name: trimmedName,
+          slug: trimmedSlug,
+          crm_type: workspaceCrmType,
         },
       });
-
       applySettings(response);
-      toast.success('SMTP sender saved.');
+      await refreshWorkspace(session);
+      toast.success('Workspace setup updated.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save SMTP sender.';
+      const message = error instanceof Error ? error.message : 'Unable to update workspace setup.';
       toast.error(message);
     } finally {
-      setSavingSmtp(false);
+      setSavingWorkspace(false);
     }
   }
 
-  async function handleUpdateSender(senderId: string, patch: { is_default?: boolean; is_active?: boolean }) {
-    if (!session || !workspace) {
+  async function handleSavePreferences() {
+    if (!session || !workspace || typeof window === 'undefined') {
       return;
     }
 
-    setSenderActionLoadingId(senderId);
+    setSavingPreferences(true);
 
     try {
-      const response = await updateAccountSettings(session, {
-        workspace_id: workspace.id,
-        sender: {
-          id: senderId,
-          ...patch,
-        },
-      });
-      applySettings(response);
-      toast.success('Sender updated.');
+      const storageKey = getPreferencesStorageKey(session.user.id, workspace.id);
+      window.localStorage.setItem(storageKey, JSON.stringify(preferences));
+      toast.success('Preferences saved on this device.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to update sender.';
+      const message = error instanceof Error ? error.message : 'Unable to save preferences.';
       toast.error(message);
     } finally {
-      setSenderActionLoadingId(null);
+      setSavingPreferences(false);
     }
   }
-
-  async function handleSaveAutomation() {
-    if (!session || !workspace) {
-      return;
-    }
-
-    const invalidStep = steps.find((step) => step.subject_template.trim().length === 0 || step.body_template.trim().length === 0);
-
-    if (invalidStep) {
-      toast.error(`Step ${invalidStep.step_order} requires subject and body templates.`);
-      return;
-    }
-
-    setSavingAutomation(true);
-
-    try {
-      const response = await updateAccountSettings(session, {
-        workspace_id: workspace.id,
-        automation: {
-          is_enabled: automationEnabled,
-          timezone: automationTimezone || 'UTC',
-        },
-        sequence_steps: steps.map((step) => ({
-          step_order: step.step_order,
-          delay_hours: Math.max(0, Number(step.delay_hours) || 0),
-          subject_template: step.subject_template,
-          body_template: step.body_template,
-          is_active: step.is_active,
-        })),
-      });
-
-      applySettings(response);
-      toast.success('Automation settings updated.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to update automation settings.';
-      toast.error(message);
-    } finally {
-      setSavingAutomation(false);
-    }
-  }
-
-  function updateStep(stepOrder: number, patch: Partial<EditableStep>) {
-    setSteps((current) => current.map((step) => (step.step_order === stepOrder ? { ...step, ...patch } : step)));
-  }
-
-  const oauthSenders = useMemo(
-    () => (settings?.senders ?? []).filter((sender) => sender.provider === 'google' || sender.provider === 'microsoft'),
-    [settings?.senders],
-  );
 
   if (!session || !workspace) {
     return <FullPageLoader label="Loading account settings..." />;
@@ -363,13 +313,15 @@ export function AccountPage() {
     return <FullPageLoader label="Loading account settings..." />;
   }
 
+  const canManageWorkspace = Boolean(settings?.workspace.can_manage);
+
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
       <div className="space-y-5">
         <PageHeader
           eyebrow="Account"
-          title="Account and email automation"
-          description="Configure profile, shared sender connections, and lead follow-up email automation for this workspace."
+          title="Account"
+          description="Manage your profile, sign-in details, and personal preferences."
           actions={(
             <Button type="button" variant="secondary" size="sm" onClick={() => void loadSettings()}>
               <RefreshCw className="h-4 w-4" />
@@ -383,23 +335,19 @@ export function AccountPage() {
             <ShieldCheck className="mt-0.5 h-5 w-5 text-accent-blue" />
             <div className="min-w-0 flex-1">
               <h2 className="font-semibold text-slate-900">Profile</h2>
-              <p className="mt-1 text-sm text-slate-600">Update your account profile used across workspace activity logs.</p>
+              <p className="mt-1 text-sm text-slate-600">Update your personal details used across workspace activity logs.</p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1.5 text-sm text-slate-700">
                   <span className="font-medium">Email</span>
-                  <input
-                    value={settings?.profile.email ?? ''}
-                    disabled
-                    className="h-11 rounded-xl border border-slate-300 bg-slate-50 px-3.5 text-sm text-slate-600"
-                  />
+                  <input value={settings?.profile.email ?? ''} disabled className={READ_ONLY_INPUT_CLASSES} />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm text-slate-700">
                   <span className="font-medium">Full name</span>
                   <input
                     value={profileName}
                     onChange={(event) => setProfileName(event.target.value)}
-                    className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
+                    className={INPUT_CLASSES}
                   />
                 </label>
               </div>
@@ -415,281 +363,189 @@ export function AccountPage() {
 
         <Card className="p-6">
           <div className="flex items-start gap-3">
-            <Mail className="mt-0.5 h-5 w-5 text-accent-blue" />
-            <div className="min-w-0 flex-1 space-y-4">
-              <div>
-                <h2 className="font-semibold text-slate-900">Email sender connections</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Use one shared professional mailbox for automated lead follow-ups in this workspace.
-                </p>
+            <BriefcaseBusiness className="mt-0.5 h-5 w-5 text-accent-blue" />
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-slate-900">Workspace setup</h2>
+              <p className="mt-1 text-sm text-slate-600">Manage the shared workspace identity used across your CRM experience.</p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Workspace name</span>
+                  <input
+                    value={workspaceName}
+                    onChange={(event) => setWorkspaceName(event.target.value)}
+                    className={INPUT_CLASSES}
+                    disabled={!canManageWorkspace}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Workspace slug</span>
+                  <input
+                    value={workspaceSlug}
+                    onChange={(event) => setWorkspaceSlug(slugify(event.target.value))}
+                    className={INPUT_CLASSES}
+                    disabled={!canManageWorkspace}
+                  />
+                  <span className="text-xs text-slate-500">Use lowercase letters, numbers, and hyphens.</span>
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Business type</span>
+                  <select
+                    value={workspaceCrmType}
+                    onChange={(event) => setWorkspaceCrmType(event.target.value as CRMType)}
+                    className={INPUT_CLASSES}
+                    disabled={!canManageWorkspace}
+                  >
+                    {crmOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Your workspace role</span>
+                  <input value={formatRole(settings?.workspace.role)} disabled className={READ_ONLY_INPUT_CLASSES} />
+                </label>
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void handleConnectOAuth('google')}
-                  loading={oauthLoading === 'google'}
-                  disabled={!canManage}
-                >
-                  Connect Google
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void handleConnectOAuth('microsoft')}
-                  loading={oauthLoading === 'microsoft'}
-                  disabled={!canManage}
-                >
-                  Connect Microsoft
-                </Button>
+              <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                {canManageWorkspace
+                  ? 'Workspace owners and admins can update the shared workspace name, slug, and business type here.'
+                  : 'Only workspace owners and admins can edit workspace setup.'}
               </div>
 
-              {oauthSenders.length > 0 ? (
-                <div className="overflow-hidden rounded-xl border border-slate-300">
-                  <table className="w-full text-left text-sm text-slate-700">
-                    <thead className="bg-slate-100 text-xs uppercase tracking-[0.16em] text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2.5 font-medium">Provider</th>
-                        <th className="px-3 py-2.5 font-medium">Sender</th>
-                        <th className="px-3 py-2.5 font-medium">Status</th>
-                        <th className="px-3 py-2.5 text-right font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {oauthSenders.map((sender) => (
-                        <tr key={sender.id} className="border-t border-slate-200">
-                          <td className="px-3 py-2.5 capitalize">{sender.provider}</td>
-                          <td className="px-3 py-2.5">{sender.sender_email}</td>
-                          <td className="px-3 py-2.5">{formatSenderStatus(sender)}</td>
-                          <td className="px-3 py-2.5 text-right">
-                            <div className="inline-flex items-center gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                disabled={!canManage || sender.is_default}
-                                loading={senderActionLoadingId === sender.id}
-                                onClick={() => void handleUpdateSender(sender.id, { is_default: true })}
-                              >
-                                Set default
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                disabled={!canManage}
-                                loading={senderActionLoadingId === sender.id}
-                                onClick={() => void handleUpdateSender(sender.id, { is_active: !sender.is_active })}
-                              >
-                                {sender.is_active ? 'Disable' : 'Enable'}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  No OAuth sender connected yet.
-                </div>
-              )}
-
-              <div className="rounded-xl border border-slate-300 bg-slate-50 p-4">
-                <h3 className="font-medium text-slate-900">SMTP fallback</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Configure SMTP for providers not covered by OAuth. Password is encrypted at rest.
-                </p>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">Sender email</span>
-                    <input
-                      value={smtpEmail}
-                      onChange={(event) => setSmtpEmail(event.target.value)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">Sender name</span>
-                    <input
-                      value={smtpName}
-                      onChange={(event) => setSmtpName(event.target.value)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">SMTP host</span>
-                    <input
-                      value={smtpHost}
-                      onChange={(event) => setSmtpHost(event.target.value)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">SMTP port</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={smtpPort}
-                      onChange={(event) => setSmtpPort(Number.parseInt(event.target.value, 10) || 0)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">SMTP username</span>
-                    <input
-                      value={smtpUsername}
-                      onChange={(event) => setSmtpUsername(event.target.value)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">SMTP password {smtpSenderId ? '(optional to keep existing)' : ''}</span>
-                    <input
-                      type="password"
-                      value={smtpPassword}
-                      onChange={(event) => setSmtpPassword(event.target.value)}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-700">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={smtpTls}
-                      onChange={(event) => setSmtpTls(event.target.checked)}
-                      disabled={!canManage}
-                    />
-                    Use TLS
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={smtpDefault}
-                      onChange={(event) => setSmtpDefault(event.target.checked)}
-                      disabled={!canManage}
-                    />
-                    Set as default sender
-                  </label>
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <Button type="button" onClick={() => void handleSaveSmtpSender()} loading={savingSmtp} disabled={!canManage}>
-                    Save SMTP sender
-                  </Button>
-                </div>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveWorkspace()}
+                  loading={savingWorkspace}
+                  disabled={!canManageWorkspace}
+                >
+                  Save workspace
+                </Button>
               </div>
             </div>
           </div>
         </Card>
 
         <Card className="p-6">
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-semibold text-slate-900">Follow-up automation</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Automatically queue 3 follow-up emails after lead creation when the lead has an email address.
-              </p>
-            </div>
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-5 w-5 text-accent-blue" />
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-slate-900">Security</h2>
+              <p className="mt-1 text-sm text-slate-600">Review how this account is signed in and which session is currently active.</p>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={automationEnabled}
-                  onChange={(event) => setAutomationEnabled(event.target.checked)}
-                  disabled={!canManage}
-                />
-                Enable automation
-              </label>
-
-              <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                <span className="font-medium">Timezone</span>
-                <input
-                  value={automationTimezone}
-                  onChange={(event) => setAutomationTimezone(event.target.value)}
-                  className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                  disabled={!canManage}
-                  placeholder="UTC"
-                />
-              </label>
-            </div>
-
-            <div className="space-y-4">
-              {steps.map((step) => (
-                <div key={step.step_order} className="rounded-xl border border-slate-300 bg-slate-50 p-4">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <div className="font-medium text-slate-900">Step {step.step_order}</div>
-                    <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={step.is_active}
-                        onChange={(event) => updateStep(step.step_order, { is_active: event.target.checked })}
-                        disabled={!canManage}
-                      />
-                      Active
-                    </label>
-                  </div>
-
-                  <label className="mb-3 flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">Delay (hours)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={step.delay_hours}
-                      onChange={(event) =>
-                        updateStep(step.step_order, {
-                          delay_hours: Math.max(0, Number.parseInt(event.target.value, 10) || 0),
-                        })
-                      }
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-
-                  <label className="mb-3 flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">Subject template</span>
-                    <input
-                      value={step.subject_template}
-                      onChange={(event) => updateStep(step.step_order, { subject_template: event.target.value })}
-                      className="h-11 rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
-
-                  <label className="flex flex-col gap-1.5 text-sm text-slate-700">
-                    <span className="font-medium">Body template</span>
-                    <textarea
-                      rows={5}
-                      value={step.body_template}
-                      onChange={(event) => updateStep(step.step_order, { body_template: event.target.value })}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900"
-                      disabled={!canManage}
-                    />
-                  </label>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Sign-in method</span>
+                  <input value={authProviders.join(', ')} disabled className={READ_ONLY_INPUT_CLASSES} />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Workspace role</span>
+                  <input value={formatRole(settings?.workspace.role)} disabled className={READ_ONLY_INPUT_CLASSES} />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Email verification</span>
+                  <input value={user?.email_confirmed_at ? 'Verified' : 'Pending verification'} disabled className={READ_ONLY_INPUT_CLASSES} />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Last sign in</span>
+                  <input value={formatDateTime(user?.last_sign_in_at ?? null)} disabled className={READ_ONLY_INPUT_CLASSES} />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Session expires</span>
+                  <input
+                    value={formatDateTime(session.expires_at ? new Date(session.expires_at * 1000).toISOString() : null)}
+                    disabled
+                    className={READ_ONLY_INPUT_CLASSES}
+                  />
+                </label>
+                <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Password changes and advanced security flows can be added later through your Supabase auth settings.
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs text-slate-500">
-              Available template tokens: {(settings?.tokens ?? []).join(', ')}
+              <div className="mt-4 flex justify-end">
+                <Button type="button" variant="secondary" onClick={() => void handleSignOut()}>
+                  Sign out
+                </Button>
+              </div>
             </div>
+          </div>
+        </Card>
 
-            <div className="flex justify-end">
-              <Button type="button" onClick={() => void handleSaveAutomation()} loading={savingAutomation} disabled={!canManage}>
-                Save automation
-              </Button>
+        <Card className="p-6">
+          <div className="flex items-start gap-3">
+            <Settings2 className="mt-0.5 h-5 w-5 text-accent-blue" />
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-slate-900">Preferences</h2>
+              <p className="mt-1 text-sm text-slate-600">Save personal viewing defaults for this browser and workspace.</p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Timezone</span>
+                  <select
+                    value={preferences.timezone}
+                    onChange={(event) => setPreferences((current) => ({ ...current, timezone: event.target.value }))}
+                    className={INPUT_CLASSES}
+                  >
+                    {TIMEZONE_OPTIONS.map((timezone) => (
+                      <option key={timezone} value={timezone}>
+                        {timezone}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Date format</span>
+                  <select
+                    value={preferences.dateFormat}
+                    onChange={(event) =>
+                      setPreferences((current) => ({
+                        ...current,
+                        dateFormat: event.target.value as DateFormatOption,
+                      }))
+                    }
+                    className={INPUT_CLASSES}
+                  >
+                    <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                    <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                    <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-sm text-slate-700">
+                  <span className="font-medium">Default landing page</span>
+                  <select
+                    value={preferences.landingPage}
+                    onChange={(event) =>
+                      setPreferences((current) => ({
+                        ...current,
+                        landingPage: event.target.value as LandingPageOption,
+                      }))
+                    }
+                    className={INPUT_CLASSES}
+                  >
+                    <option value="/dashboard">Overview</option>
+                    <option value="/records">Records</option>
+                    <option value="/imports">Imports</option>
+                    <option value="/email">Email</option>
+                    <option value="/account">Account</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                These preferences are currently saved per user and workspace in this browser.
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <Button type="button" onClick={() => void handleSavePreferences()} loading={savingPreferences}>
+                  Save preferences
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

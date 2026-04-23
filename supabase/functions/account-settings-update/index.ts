@@ -25,6 +25,14 @@ interface SenderPayload {
   };
 }
 
+const CRM_TYPES = new Set([
+  'real-estate',
+  'gas-station',
+  'convenience-store',
+  'restaurant',
+  'auto-repair',
+]);
+
 function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -53,6 +61,14 @@ function normalizeInteger(value: unknown) {
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function isValidWorkspaceSlug(value: string) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length >= 3;
+}
+
+function canManageWorkspace(role: string) {
+  return role === 'owner' || role === 'admin';
 }
 
 async function upsertSender(
@@ -264,7 +280,7 @@ Deno.serve(async (request) => {
     }
 
     const membership = await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
-    const canManage = true;
+    const canManage = canManageWorkspace(membership.role);
 
     await ensureWorkspaceEmailAutomationDefaults(authContext.serviceClient, workspaceId, authContext.user.id);
 
@@ -284,6 +300,50 @@ Deno.serve(async (request) => {
 
       if (profileError) {
         return jsonResponse({ error: profileError.message }, 400);
+      }
+    }
+
+    const workspacePayload = asObject(payload.workspace);
+    if (workspacePayload) {
+      if (!canManage) {
+        return jsonResponse({ error: 'Only workspace owners or admins can update workspace settings.' }, 403);
+      }
+
+      const patch: Record<string, unknown> = {};
+
+      if (Object.prototype.hasOwnProperty.call(workspacePayload, 'name')) {
+        const name = normalizeString(workspacePayload.name);
+        if (name.length < 2) {
+          return jsonResponse({ error: 'workspace.name must be at least 2 characters.' }, 400);
+        }
+        patch.name = name;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(workspacePayload, 'slug')) {
+        const slug = normalizeString(workspacePayload.slug);
+        if (!isValidWorkspaceSlug(slug)) {
+          return jsonResponse({ error: 'workspace.slug must use 3+ lowercase letters, numbers, and hyphens only.' }, 400);
+        }
+        patch.slug = slug;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(workspacePayload, 'crm_type')) {
+        const crmType = normalizeString(workspacePayload.crm_type);
+        if (!CRM_TYPES.has(crmType)) {
+          return jsonResponse({ error: 'workspace.crm_type is invalid.' }, 400);
+        }
+        patch.crm_type = crmType;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        const { error: workspaceError } = await authContext.serviceClient
+          .from('workspaces')
+          .update(patch)
+          .eq('id', workspaceId);
+
+        if (workspaceError) {
+          return jsonResponse({ error: workspaceError.message }, 400);
+        }
       }
     }
 
@@ -419,11 +479,16 @@ Deno.serve(async (request) => {
       }
     }
 
-    const [{ data: profile, error: profileError }, senders, automation, sequenceSteps] = await Promise.all([
+    const [{ data: profile, error: profileError }, { data: workspace, error: workspaceError }, senders, automation, sequenceSteps] = await Promise.all([
       authContext.serviceClient
         .from('profiles')
         .select('id, full_name')
         .eq('id', authContext.user.id)
+        .maybeSingle(),
+      authContext.serviceClient
+        .from('workspaces')
+        .select('id, name, slug, crm_type')
+        .eq('id', workspaceId)
         .maybeSingle(),
       listWorkspaceEmailSenders(authContext.serviceClient, workspaceId),
       getWorkspaceAutomationSettings(authContext.serviceClient, workspaceId),
@@ -434,6 +499,14 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: profileError.message }, 400);
     }
 
+    if (workspaceError) {
+      return jsonResponse({ error: workspaceError.message }, 400);
+    }
+
+    if (!workspace) {
+      return jsonResponse({ error: 'Workspace not found.' }, 404);
+    }
+
     return jsonResponse({
       profile: {
         id: authContext.user.id,
@@ -442,6 +515,9 @@ Deno.serve(async (request) => {
       },
       workspace: {
         id: workspaceId,
+        name: workspace.name,
+        slug: workspace.slug,
+        crm_type: workspace.crm_type,
         role: membership.role,
         can_manage: canManage,
       },
