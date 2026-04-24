@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { PhoneIncoming, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { VoiceNumberTable } from '../components/voice/VoiceNumberTable';
@@ -9,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import type { VoiceNumberRecord } from '../lib/voice-service';
 import { listVoiceNumbers, reconcileVoiceNumber, updateVoiceNumber } from '../lib/voice-service';
 
@@ -37,6 +39,38 @@ export function VoiceNumbersPage() {
   const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
   const readyCount = numbers.filter((number) => number.webhook_status === 'ready').length;
   const activeCount = numbers.filter((number) => number.is_active).length;
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'voice-numbers',
+      title: 'Manage provisioned voice numbers',
+      summary:
+        'This page is the inventory view for all workspace numbers. Users can label them, toggle active status, and reconcile provisioning state from one place.',
+      nextStep:
+        numbers.length === 0
+          ? 'Provision a new number first so the workspace has a live inbound line.'
+          : 'Review status and labels here, then jump into assistants or provisioning when the routing setup changes.',
+      highlights: ['Provisioned inventory', 'Webhook status', 'Assistant handoff'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'voice-numbers-new',
+          title: 'Provision another number',
+          body: 'Use this when the workspace needs a new inbound line for a region, campaign, or business unit.',
+          targetId: 'voice-numbers-new',
+        },
+        {
+          id: 'voice-numbers-table',
+          title: 'Manage the current inventory',
+          body: 'Each row in the table lets the team update labels, toggle active status, and reconcile number state without leaving the voice workspace.',
+          targetId: 'voice-numbers-table',
+          placement: 'top',
+        },
+      ],
+    }),
+    [numbers.length],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -167,6 +201,7 @@ export function VoiceNumbersPage() {
             <>
               <Link
                 to="/voice/numbers/new"
+                data-guide-id="voice-numbers-new"
                 className="inline-flex items-center rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
               >
                 New number
@@ -203,16 +238,18 @@ export function VoiceNumbersPage() {
         ) : numbersError ? (
           <Card className="border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{numbersError}</Card>
         ) : (
-          <VoiceNumberTable
-            numbers={numbers}
-            drafts={drafts}
-            savingId={savingId}
-            reconcilingId={reconcilingId}
-            onLabelChange={(voiceNumberId, label) => updateDraft(voiceNumberId, { label })}
-            onActiveChange={(voiceNumberId, isActive) => updateDraft(voiceNumberId, { is_active: isActive })}
-            onSave={handleSaveNumber}
-            onReconcile={handleReconcileNumber}
-          />
+          <div data-guide-id="voice-numbers-table">
+            <VoiceNumberTable
+              numbers={numbers}
+              drafts={drafts}
+              savingId={savingId}
+              reconcilingId={reconcilingId}
+              onLabelChange={(voiceNumberId, label) => updateDraft(voiceNumberId, { label })}
+              onActiveChange={(voiceNumberId, isActive) => updateDraft(voiceNumberId, { is_active: isActive })}
+              onSave={handleSaveNumber}
+              onReconcile={handleReconcileNumber}
+            />
+          </div>
         )}
       </div>
     </WorkspaceLayout>

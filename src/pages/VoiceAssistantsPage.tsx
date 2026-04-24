@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { VoiceAgentsPanel } from '../components/voice/VoiceAgentsPanel';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import type { VoiceNumberRecord } from '../lib/voice-service';
 import { listVoiceNumbers } from '../lib/voice-service';
 
@@ -18,6 +20,38 @@ export function VoiceAssistantsPage() {
   const numbersRequestIdRef = useRef(0);
 
   const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'voice-assistants',
+      title: 'Manage workspace assistants',
+      summary:
+        'This page is the shared control center for voice assistants, number bindings, and CRM field mappings used during inbound call handling.',
+      nextStep:
+        numbers.length === 0
+          ? 'Create an assistant first, then provision or bind a number when you are ready to route live calls.'
+          : 'Review the existing assistant setup and create a new assistant when a workflow needs its own call-handling logic.',
+      highlights: ['Assistant inventory', 'Number bindings', 'CRM mapping control'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'voice-assistants-new',
+          title: 'Create a new assistant',
+          body: 'Use this when the workspace needs a separate greeting, call flow, or routing policy for a specific workflow.',
+          targetId: 'voice-assistants-new',
+        },
+        {
+          id: 'voice-assistants-panel',
+          title: 'Review assistant setup in one place',
+          body: 'The assistants panel centralizes configuration, bindings, and CRM mappings so the voice workspace stays manageable.',
+          targetId: 'voice-assistants-panel',
+          placement: 'top',
+        },
+      ],
+    }),
+    [numbers.length],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -89,6 +123,7 @@ export function VoiceAssistantsPage() {
               </Link>
               <Link
                 to="/voice/assistants/new"
+                data-guide-id="voice-assistants-new"
                 className="inline-flex items-center rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
               >
                 New assistant
@@ -97,13 +132,16 @@ export function VoiceAssistantsPage() {
           )}
         />
 
-        <VoiceAgentsPanel
-          session={session}
-          workspaceId={workspace.id}
-          numbers={numbers}
-          numbersLoading={numbersLoading}
-          numbersError={numbersError}
-        />
+        <div data-guide-id="voice-assistants-panel">
+          <VoiceAgentsPanel
+            session={session}
+            workspaceId={workspace.id}
+            workspaceCrmType={workspace.crmType}
+            numbers={numbers}
+            numbersLoading={numbersLoading}
+            numbersError={numbersError}
+          />
+        </div>
       </div>
     </WorkspaceLayout>
   );

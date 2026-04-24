@@ -1,4 +1,5 @@
 import { Bell, Building2, ChevronDown, LogOut, Search } from 'lucide-react';
+import { GuideLauncherButton } from '../guidance/GuideLauncherButton';
 import type { WorkspaceSummary } from '../../lib/types';
 
 interface DashboardTopbarProps {
@@ -17,6 +18,8 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
 
       {/* Right actions */}
       <div className="flex items-center gap-2">
+        <GuideLauncherButton />
+
         {/* Workspace selector chip */}
         <div className="flex cursor-default items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-sm font-medium text-slate-700">
           <Building2 className="h-3.5 w-3.5 text-slate-400" />

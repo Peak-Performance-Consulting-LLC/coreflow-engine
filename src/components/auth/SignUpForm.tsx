@@ -1,12 +1,14 @@
 import { Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { completeSignup } from '../../lib/auth-helpers';
 import { getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils';
 import type { CRMType } from '../../lib/types';
+import type { AppPageGuide } from '../../context/AppGuideContext';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageGuide } from '../../hooks/useAppGuide';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';
@@ -44,6 +46,73 @@ export function SignUpForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'auth-signup',
+      title: step === 1 ? 'Create your CoreFlow account' : 'Set up the shared workspace',
+      summary:
+        step === 1
+          ? 'Step one creates the user account. Step two turns that account into a shared workspace configured for the right CRM mode.'
+          : 'This step defines the shared workspace identity and the CRM mode that shapes the product across records, voice, email, and account settings.',
+      nextStep:
+        step === 1
+          ? 'Finish the account details, then continue to workspace setup.'
+          : 'Pick the workspace details carefully, because they become the shared operating context for the whole app.',
+      highlights:
+        step === 1
+          ? ['Two-step signup', 'Account validation', 'Owner account creation']
+          : ['Workspace identity', 'CRM mode selection', 'Shared platform context'],
+      autoStart: 'once' as const,
+      steps:
+        step === 1
+          ? [
+              {
+                id: 'signup-email',
+                title: 'Create the owner login',
+                body: 'Use the name and email that should own the first CoreFlow workspace session and act as the default administrator.',
+                targetId: 'sign-up-email',
+              },
+              {
+                id: 'signup-password',
+                title: 'Set the account password',
+                body: 'CoreFlow validates the password here before moving forward so the account can be created cleanly at the final submit.',
+                targetId: 'sign-up-password',
+              },
+              {
+                id: 'signup-next',
+                title: 'Move into workspace setup',
+                body: 'The next step keeps the account details and opens the workspace setup needed to launch the shared CRM environment.',
+                targetId: 'sign-up-submit',
+                placement: 'top',
+              },
+            ]
+          : [
+              {
+                id: 'signup-workspace-name',
+                title: 'Name the shared workspace',
+                body: 'This name appears across the platform and should match the business or team identity everyone in the workspace recognizes.',
+                targetId: 'sign-up-workspace-name',
+              },
+              {
+                id: 'signup-crm-mode',
+                title: 'Choose the CRM mode',
+                body: 'The CRM mode shapes the seeded workflow and gives the workspace its shared business context across the app.',
+                targetId: 'sign-up-crm-mode',
+              },
+              {
+                id: 'signup-launch',
+                title: 'Launch the workspace',
+                body: 'Submitting here creates the workspace, links you as the first member, and routes you into the correct dashboard automatically.',
+                targetId: 'sign-up-submit',
+                placement: 'top',
+              },
+            ],
+    }),
+    [step],
+  );
+
+  usePageGuide(guide);
 
   function validateAccountStep() {
     const nextErrors: FormErrors = {};
@@ -177,6 +246,7 @@ export function SignUpForm() {
 
           <Input
             label="Full name"
+            data-guide-id="sign-up-full-name"
             placeholder="Jordan Lee"
             autoComplete="name"
             value={fullName}
@@ -186,6 +256,7 @@ export function SignUpForm() {
           <Input
             label="Email"
             type="email"
+            data-guide-id="sign-up-email"
             placeholder="you@company.com"
             autoComplete="email"
             value={email}
@@ -196,6 +267,7 @@ export function SignUpForm() {
             <Input
               label="Password"
               type={showPassword ? 'text' : 'password'}
+              data-guide-id="sign-up-password"
               placeholder="Create a password"
               autoComplete="new-password"
               value={password}
@@ -244,6 +316,11 @@ export function SignUpForm() {
               workspaceName={workspaceName}
               workspaceSlug={workspaceSlug}
               crmType={crmType}
+              guideIds={{
+                workspaceName: 'sign-up-workspace-name',
+                workspaceSlug: 'sign-up-workspace-slug',
+                crmType: 'sign-up-crm-mode',
+              }}
               errors={errors}
               onWorkspaceNameChange={updateWorkspaceName}
               onWorkspaceSlugChange={(value) => {
@@ -294,7 +371,7 @@ export function SignUpForm() {
         ) : (
           <span />
         )}
-        <Button type="submit" className="w-full sm:w-auto" loading={loading}>
+        <Button type="submit" className="w-full sm:w-auto" loading={loading} data-guide-id="sign-up-submit">
           {step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}
         </Button>
       </div>

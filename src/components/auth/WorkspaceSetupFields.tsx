@@ -13,6 +13,11 @@ interface WorkspaceSetupFieldsProps {
   singleColumn?: boolean;
   showSlugPreview?: boolean;
   slugPreviewPrefix?: string;
+  guideIds?: {
+    workspaceName?: string;
+    workspaceSlug?: string;
+    crmType?: string;
+  };
 }
 
 export function WorkspaceSetupFields({
@@ -26,6 +31,7 @@ export function WorkspaceSetupFields({
   singleColumn = false,
   showSlugPreview = false,
   slugPreviewPrefix = '',
+  guideIds,
 }: WorkspaceSetupFieldsProps) {
   const hasSlug = workspaceSlug.trim().length > 0;
   const previewUrl = `${slugPreviewPrefix}${workspaceSlug}`;
@@ -35,6 +41,7 @@ export function WorkspaceSetupFields({
       <div className={`grid gap-5 ${singleColumn ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
         <Input
           label="Workspace name"
+          data-guide-id={guideIds?.workspaceName}
           placeholder="CoreFlow Ventures"
           value={workspaceName}
           onChange={(event) => onWorkspaceNameChange(event.target.value)}
@@ -42,6 +49,7 @@ export function WorkspaceSetupFields({
         />
         <Input
           label="Workspace slug"
+          data-guide-id={guideIds?.workspaceSlug}
           placeholder="coreflow-ventures"
           value={workspaceSlug}
           onChange={(event) => onWorkspaceSlugChange(event.target.value)}
@@ -57,13 +65,15 @@ export function WorkspaceSetupFields({
         </div>
       ) : null}
 
-      <CRMSelector
-        value={crmType}
-        onChange={onCrmTypeChange}
-        error={errors.crmType}
-        title="Choose your business type"
-        subtitle="You can change this later"
-      />
+      <div data-guide-id={guideIds?.crmType}>
+        <CRMSelector
+          value={crmType}
+          onChange={onCrmTypeChange}
+          error={errors.crmType}
+          title="Choose your business type"
+          subtitle="You can change this later"
+        />
+      </div>
     </div>
   );
 }

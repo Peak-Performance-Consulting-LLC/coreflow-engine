@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
+import { AssistantAIGeneratorModal } from '../components/voice/AssistantAIGeneratorModal';
 import { VoiceAgentForm, createEmptyVoiceAgentFormValues, type VoiceAgentFormValues } from '../components/voice/VoiceAgentForm';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import {
   createVoiceAgent,
@@ -16,6 +19,8 @@ import {
   type VoiceAgentTelnyxOptions,
   VoiceAgentServiceError,
 } from '../lib/voice-agent-service';
+import { formatCrmLabel } from '../lib/utils';
+import type { GeneratedAssistantContent } from '../types/voice-assistant-ai';
 
 export function VoiceNewAssistantPage() {
   const navigate = useNavigate();
@@ -28,8 +33,54 @@ export function VoiceNewAssistantPage() {
   const [telnyxOptions, setTelnyxOptions] = useState<VoiceAgentTelnyxOptions | null>(null);
   const [telnyxOptionsLoading, setTelnyxOptionsLoading] = useState(false);
   const [telnyxOptionsError, setTelnyxOptionsError] = useState('');
+  const [isAiGeneratorOpen, setIsAiGeneratorOpen] = useState(false);
+  const [lastGeneratedContent, setLastGeneratedContent] = useState<GeneratedAssistantContent | null>(null);
 
   const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'voice-new-assistant',
+      title: 'Create a voice assistant',
+      summary:
+        'This page creates the assistant configuration used for inbound call handling. Users can draft manually or use AI Setup to generate a structured starting point.',
+      nextStep:
+        values.system_prompt.trim().length > 0
+          ? 'Review the assistant name, greeting, and system prompt, then save when the workflow looks ready.'
+          : 'Start with AI Setup for guided generation, or fill the fields manually if the call flow is already defined.',
+      highlights: ['AI-assisted draft', 'Manual editing', 'Telnyx-ready setup'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'voice-assistant-ai',
+          title: 'Generate a first draft with AI',
+          body: 'AI Setup is the quickest way to produce a structured greeting and prompt for the assistant without writing from scratch.',
+          targetId: 'voice-assistant-ai-setup',
+        },
+        {
+          id: 'voice-assistant-name',
+          title: 'Name the assistant clearly',
+          body: 'Give the assistant an operational name the team can recognize later in assistant lists, bindings, and voice review queues.',
+          targetId: 'voice-assistant-name',
+        },
+        {
+          id: 'voice-assistant-prompt',
+          title: 'Review the call behavior prompt',
+          body: 'The system prompt controls what the assistant says, what it collects, and how it decides to route, transfer, or close the call.',
+          targetId: 'voice-assistant-system-prompt',
+        },
+        {
+          id: 'voice-assistant-save',
+          title: 'Save the assistant into the workspace',
+          body: 'Saving creates the workspace assistant and stores the configuration that future inbound call handling can use.',
+          targetId: 'voice-assistant-submit',
+          placement: 'top',
+        },
+      ],
+    }),
+    [values.system_prompt],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -71,6 +122,22 @@ export function VoiceNewAssistantPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleApplyGeneratedContent(content: GeneratedAssistantContent) {
+    setValues((current) => ({
+      ...current,
+      name: content.suggestedName,
+      description: content.description,
+      greeting: content.greeting,
+      system_prompt: content.systemPrompt,
+    }));
+    setLastGeneratedContent(content);
+    toast.success(
+      content.usedFallback
+        ? 'A basic AI draft was applied. Please review it before saving.'
+        : 'AI-generated assistant setup applied. You can edit everything before saving.',
+    );
   }
 
   useEffect(() => {
@@ -171,9 +238,24 @@ export function VoiceNewAssistantPage() {
             values={values}
             onValuesChange={setValues}
             onSubmit={handleCreateAssistant}
+            aiGeneration={{
+              onOpen: () => setIsAiGeneratorOpen(true),
+              lastGenerated: lastGeneratedContent,
+            }}
           />
         )}
       </div>
+
+      {session && workspace ? (
+        <AssistantAIGeneratorModal
+          isOpen={isAiGeneratorOpen}
+          session={session}
+          workspaceId={workspace.id}
+          suggestedBusinessType={formatCrmLabel(workspace.crmType)}
+          onClose={() => setIsAiGeneratorOpen(false)}
+          onApply={handleApplyGeneratedContent}
+        />
+      ) : null}
     </WorkspaceLayout>
   );
 }

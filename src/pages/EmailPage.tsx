@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import type { WorkspaceSummary } from '../lib/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { uploadAsset } from '../lib/email-template-service';
@@ -658,9 +659,38 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
 
   const allTemplates = [...PREMADE_TEMPLATES, ...customTemplates];
 
+  usePageGuide({
+    key: 'email-workspace',
+    title: 'Run email setup and automation',
+    summary:
+      'This email workspace combines sender configuration, template drafting, and scheduling so the team can manage operational email from one place.',
+    nextStep:
+      activeTab === 'config'
+        ? 'Connect or verify a sender first so the workspace can actually send mail.'
+        : activeTab === 'templates'
+          ? 'Review or create a template next so automated emails and manual sends have approved content.'
+          : 'Inspect scheduled sends and automation timing so follow-up goes out at the right moment.',
+    highlights: ['Provider setup', 'Templates', 'Scheduling and automation'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'email-page-header',
+        title: 'Start from the email workspace overview',
+        body: 'This page header frames the email area around one goal: connecting senders and operating email workflows for the shared workspace.',
+        targetId: 'email-page-header',
+      },
+      {
+        id: 'email-page-tabs',
+        title: 'Switch between the three email jobs',
+        body: 'Use the tabs to move between sender configuration, content work, and scheduling or automation operations.',
+        targetId: 'email-page-tabs',
+      },
+    ],
+  });
+
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex items-start justify-between gap-4" data-guide-id="email-page-header">
         <div>
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Mail className="h-5 w-5" /></div>
@@ -673,7 +703,7 @@ function EmailPageInner({ workspace, onSignOut }: { workspace: WorkspaceSummary;
         </button>
       </div>
 
-      <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+      <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1" data-guide-id="email-page-tabs">
         {TABS.map(tab => {
           const Icon = tab.icon; const isActive = activeTab === tab.id;
           return (

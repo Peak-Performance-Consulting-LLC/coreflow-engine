@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCrmWorkspace } from '../../hooks/useCrmWorkspace';
+import { deriveAssistantPromptInputFromAgent } from '../../lib/voice-assistant-ai-service';
+import type { CRMType } from '../../lib/types';
 import type {
   VoiceAgentBindingRecord,
   VoiceAgentMappingInput,
@@ -20,19 +22,23 @@ import {
   VoiceAgentServiceError,
   updateVoiceAgent,
 } from '../../lib/voice-agent-service';
+import { formatCrmLabel } from '../../lib/utils';
 import type { VoiceNumberRecord } from '../../lib/voice-service';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { SectionSkeleton } from '../ui/SectionSkeleton';
+import { AssistantAIGeneratorModal } from './AssistantAIGeneratorModal';
 import { type VoiceAgentFormValues, createEmptyVoiceAgentFormValues } from './VoiceAgentForm';
 import { VoiceAgentBindingsEditor } from './VoiceAgentBindingsEditor';
 import { VoiceAgentFieldMappingEditor } from './VoiceAgentFieldMappingEditor';
 import { VoiceAgentFormDrawer } from './VoiceAgentFormDrawer';
 import type { Session } from '@supabase/supabase-js';
+import type { GeneratedAssistantContent } from '../../types/voice-assistant-ai';
 
 interface VoiceAgentsPanelProps {
   session: Session;
   workspaceId: string;
+  workspaceCrmType: CRMType;
   numbers: VoiceNumberRecord[];
   numbersLoading: boolean;
   numbersError: string;
@@ -41,6 +47,7 @@ interface VoiceAgentsPanelProps {
 export function VoiceAgentsPanel({
   session,
   workspaceId,
+  workspaceCrmType,
   numbers,
   numbersLoading,
   numbersError,
@@ -67,6 +74,8 @@ export function VoiceAgentsPanel({
   const [telnyxOptionsError, setTelnyxOptionsError] = useState('');
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [editDraftValues, setEditDraftValues] = useState<VoiceAgentFormValues>(createEmptyVoiceAgentFormValues);
+  const [isEditAiGeneratorOpen, setIsEditAiGeneratorOpen] = useState(false);
+  const [lastEditGeneratedContent, setLastEditGeneratedContent] = useState<GeneratedAssistantContent | null>(null);
 
   const readyNumbers = useMemo(
     () =>
@@ -213,6 +222,8 @@ export function VoiceAgentsPanel({
         source_id: response.agent.source_id ?? '',
         status: response.agent.status,
       });
+      setLastEditGeneratedContent(null);
+      setIsEditAiGeneratorOpen(false);
       setIsEditDrawerOpen(false);
       await loadAgents(response.agent.id);
     } catch (error) {
@@ -245,6 +256,8 @@ export function VoiceAgentsPanel({
       source_id: detail.agent.source_id ?? '',
       status: detail.agent.status,
     });
+    setLastEditGeneratedContent(null);
+    setIsEditAiGeneratorOpen(false);
     setIsEditDrawerOpen(true);
   }
 
@@ -255,8 +268,33 @@ export function VoiceAgentsPanel({
 
     setAgentErrorMessage('');
     setAgentActivationIssues([]);
+    setIsEditAiGeneratorOpen(false);
     setIsEditDrawerOpen(false);
   }
+
+  function handleApplyEditGeneratedContent(content: GeneratedAssistantContent) {
+    setEditDraftValues((current) => ({
+      ...current,
+      name: content.suggestedName,
+      description: content.description,
+      greeting: content.greeting,
+      system_prompt: content.systemPrompt,
+    }));
+    setLastEditGeneratedContent(content);
+    toast.success(
+      content.usedFallback
+        ? 'A basic AI improvement draft was applied. Please review it before saving.'
+        : 'AI improvements applied. Review the draft and save when ready.',
+    );
+  }
+
+  const editAiInitialInput = useMemo(
+    () =>
+      detail?.agent
+        ? deriveAssistantPromptInputFromAgent(detail.agent, formatCrmLabel(workspaceCrmType))
+        : null,
+    [detail?.agent, workspaceCrmType],
+  );
 
   async function handleSaveMappings(mappings: VoiceAgentMappingInput[]) {
     if (!detail) {
@@ -514,7 +552,32 @@ export function VoiceAgentsPanel({
         onValuesChange={setEditDraftValues}
         onClose={handleCloseEditDrawer}
         onSubmit={handleUpdateAgent}
+        aiGeneration={{
+          onOpen: () => setIsEditAiGeneratorOpen(true),
+          lastGenerated: lastEditGeneratedContent,
+          buttonLabel: 'Improve with AI',
+          initialInput: editAiInitialInput,
+          contextNotice: detail?.agent?.status === 'active'
+            ? 'This assistant is active. Any changes you save here will affect future calls.'
+            : undefined,
+        }}
       />
+
+      {detail?.agent ? (
+        <AssistantAIGeneratorModal
+          isOpen={isEditAiGeneratorOpen}
+          mode="edit"
+          session={session}
+          workspaceId={workspaceId}
+          suggestedBusinessType={formatCrmLabel(workspaceCrmType)}
+          initialInput={editAiInitialInput}
+          contextNotice={detail.agent.status === 'active'
+            ? 'This assistant is active. Any changes you save here will affect future calls.'
+            : undefined}
+          onClose={() => setIsEditAiGeneratorOpen(false)}
+          onApply={handleApplyEditGeneratedContent}
+        />
+      ) : null}
     </div>
   );
 }

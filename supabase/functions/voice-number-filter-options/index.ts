@@ -1,20 +1,121 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import {
+  listFallbackCityOptions,
+  listFallbackStateOptions,
+} from '../_shared/voice-number-geography-fallback.ts';
 import { authenticateRequest, ensureWorkspaceOwner } from '../_shared/server.ts';
+import { getVoiceNumberCountryOptions, isAllowedVoiceNumberCountryCode } from '../_shared/voice-number-country-options.ts';
 import { listAvailablePhoneNumberFilterOptions } from '../_shared/telnyx-numbers.ts';
 
-interface CountryOption {
+interface StateLikeOption {
   code: string;
   name: string;
 }
 
-const COUNTRY_OPTIONS: CountryOption[] = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'IE', name: 'Ireland' },
-];
+interface CityLikeOption {
+  city: string;
+  stateCode: string;
+  stateName: string;
+}
+
+interface AreaCodeLikeOption {
+  code: string;
+  stateCode: string;
+  stateName: string;
+  city: string | null;
+}
+
+function mergeStateOptions(...groups: StateLikeOption[][]) {
+  const merged = new Map<string, StateLikeOption>();
+
+  for (const group of groups) {
+    for (const state of group) {
+      const code = state.code.trim().toUpperCase();
+
+      if (!code || merged.has(code)) {
+        continue;
+      }
+
+      merged.set(code, {
+        code,
+        name: state.name.trim() || code,
+      });
+    }
+  }
+
+  return [...merged.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function mergeCityOptions(...groups: CityLikeOption[][]) {
+  const merged = new Map<string, CityLikeOption>();
+
+  for (const group of groups) {
+    for (const city of group) {
+      const stateCode = city.stateCode.trim().toUpperCase();
+      const cityName = city.city.trim();
+
+      if (!stateCode || !cityName) {
+        continue;
+      }
+
+      const key = `${cityName.toLowerCase()}::${stateCode}`;
+
+      if (merged.has(key)) {
+        continue;
+      }
+
+      merged.set(key, {
+        city: cityName,
+        stateCode,
+        stateName: city.stateName.trim() || stateCode,
+      });
+    }
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    const stateCompare = left.stateCode.localeCompare(right.stateCode);
+    return stateCompare !== 0 ? stateCompare : left.city.localeCompare(right.city);
+  });
+}
+
+function mergeAreaCodeOptions(...groups: AreaCodeLikeOption[][]) {
+  const merged = new Map<string, AreaCodeLikeOption>();
+
+  for (const group of groups) {
+    for (const areaCode of group) {
+      const code = areaCode.code.trim();
+      const stateCode = areaCode.stateCode.trim().toUpperCase();
+      const city = areaCode.city?.trim() || null;
+
+      if (!code) {
+        continue;
+      }
+
+      const key = `${code}::${stateCode}::${(city ?? '').toLowerCase()}`;
+
+      if (merged.has(key)) {
+        continue;
+      }
+
+      merged.set(key, {
+        code,
+        stateCode,
+        stateName: areaCode.stateName.trim() || stateCode || 'N/A',
+        city,
+      });
+    }
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    const stateCompare = left.stateCode.localeCompare(right.stateCode);
+    if (stateCompare !== 0) {
+      return stateCompare;
+    }
+
+    const cityCompare = (left.city ?? '').localeCompare(right.city ?? '');
+    return cityCompare !== 0 ? cityCompare : left.code.localeCompare(right.code);
+  });
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -31,8 +132,9 @@ Deno.serve(async (request) => {
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
     const requestedCountryCode = typeof payload.country_code === 'string' ? payload.country_code.trim().toUpperCase() : 'US';
-    const hasRequestedCountry = COUNTRY_OPTIONS.some((country) => country.code === requestedCountryCode);
-    const countryCode = hasRequestedCountry ? requestedCountryCode : 'US';
+    const countryCode = isAllowedVoiceNumberCountryCode(requestedCountryCode) ? requestedCountryCode : 'US';
+    const administrativeArea = typeof payload.administrative_area === 'string' ? payload.administrative_area.trim() : '';
+    const locality = typeof payload.locality === 'string' ? payload.locality.trim() : '';
 
     if (!workspaceId) {
       return jsonResponse({ error: 'workspace_id is required.' }, 400);
@@ -40,15 +142,33 @@ Deno.serve(async (request) => {
 
     await ensureWorkspaceOwner(authContext.serviceClient, workspaceId, authContext.user.id);
 
-    const options = await listAvailablePhoneNumberFilterOptions({
-      countryCode,
-      sampleSize: 250,
-    });
+    let countryLevelOptions = {
+      states: [] as StateLikeOption[],
+      cities: [] as CityLikeOption[],
+      areaCodes: [] as AreaCodeLikeOption[],
+    };
 
+    try {
+      countryLevelOptions = await listAvailablePhoneNumberFilterOptions({
+        countryCode,
+        sampleSize: 250,
+      });
+    } catch (error) {
+      console.warn('[voice-number-filter-options] Telnyx filter option fetch failed; using geography fallback only.', {
+        countryCode,
+        administrativeArea,
+        locality,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    const fallbackStates = listFallbackStateOptions(countryCode);
+    const fallbackCities = listFallbackCityOptions(countryCode, administrativeArea || null);
     return jsonResponse({
-      countries: COUNTRY_OPTIONS,
-      states: options.states,
-      cities: options.cities,
+      countries: getVoiceNumberCountryOptions(),
+      states: mergeStateOptions(fallbackStates, countryLevelOptions.states),
+      cities: mergeCityOptions(fallbackCities, countryLevelOptions.cities),
+      area_codes: mergeAreaCodeOptions(countryLevelOptions.areaCodes),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error.';

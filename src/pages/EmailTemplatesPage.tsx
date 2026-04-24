@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import type { WorkspaceSummary } from '../lib/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import {
@@ -232,9 +233,38 @@ function EmailTemplatesPageInner({
     reload();
   }, [reload]);
 
+  usePageGuide({
+    key: 'email-templates-campaigns',
+    title: 'Manage templates, campaigns, and assets',
+    summary:
+      'This page holds the reusable email content layer for the workspace, including visual templates, campaign runs, and uploaded brand assets.',
+    nextStep:
+      activeTab === 'templates'
+        ? 'Review the template library first so campaigns have approved content to work from.'
+        : activeTab === 'campaigns'
+          ? 'Inspect the campaign list next to see what is sending, paused, or ready to run.'
+          : 'Use the asset area to maintain logos and media shared by workspace templates.',
+    highlights: ['Visual templates', 'Campaign runs', 'Brand assets'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'email-templates-header',
+        title: 'Understand the content workspace',
+        body: 'This page focuses on reusable email content and campaigns rather than sender configuration.',
+        targetId: 'email-templates-header',
+      },
+      {
+        id: 'email-templates-tabs',
+        title: 'Switch between templates, campaigns, and assets',
+        body: 'Each tab controls a different part of the content workflow so the team can stay focused on one job at a time.',
+        targetId: 'email-templates-tabs',
+      },
+    ],
+  });
+
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex items-start justify-between gap-4" data-guide-id="email-templates-header">
         <div>
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
@@ -256,7 +286,7 @@ function EmailTemplatesPageInner({
         </button>
       </div>
 
-      <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+      <div className="mb-5 flex gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1" data-guide-id="email-templates-tabs">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

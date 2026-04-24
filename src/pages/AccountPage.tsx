@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import { crmOptions } from '../lib/constants';
 import {
   getAccountSettings,
@@ -129,6 +130,39 @@ export function AccountPage() {
 
     return ['Email'];
   }, [user?.app_metadata?.provider, user?.app_metadata?.providers]);
+
+  usePageGuide({
+    key: 'account-settings',
+    title: 'Manage account and workspace settings',
+    summary:
+      'This page combines personal profile details, shared workspace identity, security visibility, and local preferences for the current CoreFlow workspace.',
+    nextStep:
+      settings?.workspace.can_manage
+        ? 'Review profile changes first, then update shared workspace settings only when the whole team needs the new values.'
+        : 'Use this page for your profile and personal preferences. Shared workspace settings stay read-only until permissions change.',
+    highlights: ['Profile details', 'Workspace identity', 'Security and preferences'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'account-refresh',
+        title: 'Refresh the latest account data',
+        body: 'Use refresh before editing if the workspace or profile might have changed in another session.',
+        targetId: 'account-refresh',
+      },
+      {
+        id: 'account-profile',
+        title: 'Update the personal profile',
+        body: 'This section controls how the user appears in workspace activity history and ownership labels.',
+        targetId: 'account-profile-card',
+      },
+      {
+        id: 'account-workspace',
+        title: 'Review the shared workspace identity',
+        body: 'Only change the shared workspace values when the whole team should see a new name, slug, or CRM type.',
+        targetId: 'account-workspace-card',
+      },
+    ],
+  });
 
   function applySettings(nextSettings: AccountSettingsResponse) {
     setSettings(nextSettings);
@@ -323,14 +357,14 @@ export function AccountPage() {
           title="Account"
           description="Manage your profile, sign-in details, and personal preferences."
           actions={(
-            <Button type="button" variant="secondary" size="sm" onClick={() => void loadSettings()}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void loadSettings()} data-guide-id="account-refresh">
               <RefreshCw className="h-4 w-4" />
               Refresh
             </Button>
           )}
         />
 
-        <Card className="p-6">
+        <Card className="p-6" data-guide-id="account-profile-card">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-accent-blue" />
             <div className="min-w-0 flex-1">
@@ -361,7 +395,7 @@ export function AccountPage() {
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-6" data-guide-id="account-workspace-card">
           <div className="flex items-start gap-3">
             <BriefcaseBusiness className="mt-0.5 h-5 w-5 text-accent-blue" />
             <div className="min-w-0 flex-1">

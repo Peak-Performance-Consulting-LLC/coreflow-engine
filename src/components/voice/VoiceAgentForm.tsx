@@ -4,6 +4,9 @@ import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import type { RecordSource } from '../../lib/crm-types';
 import type { VoiceAgentRecord, VoiceAgentStatus, VoiceAgentTelnyxOptions } from '../../lib/voice-agent-service';
+import { sanitizeVoiceAssistantFallbackReason } from '../../lib/voice-assistant-ai-service';
+import type { GeneratedAssistantContent } from '../../types/voice-assistant-ai';
+import { AssistantAIGuide } from './AssistantAIGuide';
 
 export interface VoiceAgentFormValues {
   name: string;
@@ -127,6 +130,11 @@ interface VoiceAgentFormProps {
   values?: VoiceAgentFormValues;
   onValuesChange?: (values: VoiceAgentFormValues) => void;
   onSubmit: (values: VoiceAgentFormValues) => Promise<void> | void;
+  aiGeneration?: {
+    onOpen: () => void;
+    lastGenerated?: GeneratedAssistantContent | null;
+    buttonLabel?: string;
+  };
 }
 
 export function VoiceAgentForm({
@@ -142,6 +150,7 @@ export function VoiceAgentForm({
   values: controlledValues,
   onValuesChange,
   onSubmit,
+  aiGeneration,
 }: VoiceAgentFormProps) {
   const [values, setValues] = useState<VoiceAgentFormValues>(() => toFormValues(agent));
   const isControlled = Boolean(controlledValues && onValuesChange);
@@ -185,8 +194,10 @@ export function VoiceAgentForm({
     }
   }, [agent, mode, isControlled]);
 
+  const fallbackReasonDetail = sanitizeVoiceAssistantFallbackReason(aiGeneration?.lastGenerated?.fallbackReason);
+
   return (
-    <Card className="p-6">
+    <div className="p-6 bg-transparent">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-display text-2xl text-slate-900">{mode === 'create' ? 'New assistant' : 'Assistant setup'}</h3>
@@ -221,9 +232,41 @@ export function VoiceAgentForm({
           </div>
         ) : null}
 
+        {aiGeneration ? (
+          <div data-guide-id="voice-assistant-ai-setup">
+            <AssistantAIGuide
+              title={mode === 'edit' ? 'Need help improving this?' : 'Need help writing this?'}
+              body={mode === 'edit'
+                ? 'Use AI Setup to refine the greeting, description, and system prompt based on this assistant\'s workflow.'
+                : 'Use AI Setup to generate a greeting, description, and system prompt based on your workflow.'}
+              buttonLabel={aiGeneration.buttonLabel ?? 'Generate with AI'}
+              onAction={aiGeneration.onOpen}
+            />
+          </div>
+        ) : null}
+
+        {mode === 'edit' && agent?.status === 'active' && aiGeneration ? (
+          <Card className="border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            This assistant is active. Any changes you save here will affect future calls handled by this assistant.
+          </Card>
+        ) : null}
+
+        {aiGeneration?.lastGenerated?.usedFallback ? (
+          <Card className="border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="font-medium">We generated a basic draft because the AI response could not be used fully. Please review before saving.</div>
+            {fallbackReasonDetail ? (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs font-medium text-amber-700">Why am I seeing this?</summary>
+                <p className="mt-2 text-xs leading-6 text-amber-700">{fallbackReasonDetail}</p>
+              </details>
+            ) : null}
+          </Card>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-2">
           <Input
             label="Assistant name"
+            data-guide-id="voice-assistant-name"
             value={formValues.name}
             onChange={(event) => updateValues((current) => ({ ...current, name: event.target.value }))}
             placeholder="Inbound sales intake"
@@ -267,14 +310,42 @@ export function VoiceAgentForm({
         </label>
 
         <label className="flex flex-col gap-2 text-sm text-slate-700">
-          <span className="font-medium">System prompt</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="font-medium">System prompt</span>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                This defines how your assistant behaves during calls, including what it says, what it collects, and when it transfers.
+              </p>
+            </div>
+            {aiGeneration ? (
+              <Button type="button" variant="secondary" size="sm" onClick={aiGeneration.onOpen}>
+                {aiGeneration.buttonLabel ?? 'Generate with AI'}
+              </Button>
+            ) : null}
+          </div>
           <textarea
+            data-guide-id="voice-assistant-system-prompt"
             value={formValues.system_prompt}
             onChange={(event) => updateValues((current) => ({ ...current, system_prompt: event.target.value }))}
             rows={6}
             className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500"
-            placeholder="Describe how the assistant should collect information and stay within scope."
+            placeholder="Describe how the assistant should handle calls, collect information, and when to transfer. Or use AI generation."
           />
+          {aiGeneration?.lastGenerated?.sampleQuestions?.length ? (
+            <Card className="border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Your assistant will likely ask:</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {aiGeneration.lastGenerated.sampleQuestions.map((question) => (
+                  <span
+                    key={question}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs leading-5 text-slate-700"
+                  >
+                    {question}
+                  </span>
+                ))}
+              </div>
+            </Card>
+          ) : null}
         </label>
 
         <div className="rounded-2xl border border-slate-300 bg-white p-4">
@@ -372,11 +443,11 @@ export function VoiceAgentForm({
         </label>
 
         <div className="flex justify-end">
-          <Button type="submit" loading={submitting}>
+          <Button type="submit" loading={submitting} data-guide-id="voice-assistant-submit">
             {mode === 'create' ? 'Create assistant' : 'Save assistant'}
           </Button>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }

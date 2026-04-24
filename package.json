@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@reactour/tour": "^3.8.0",
     "@supabase/supabase-js": "^2.103.3",
     "areacodes": "^0.2.1",
     "clsx": "^2.1.1",

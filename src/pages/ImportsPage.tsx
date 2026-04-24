@@ -8,10 +8,11 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import { parseCsv } from '../lib/csv';
 import { createImportJob } from '../lib/crm-service';
-import type { CrmWorkspaceConfig, ImportMappingInput } from '../lib/crm-types';
+import type { CrmWorkspaceConfig, ImportJobResult, ImportMappingInput } from '../lib/crm-types';
 
 const coreTargets = [
   { key: 'title', label: 'Title' },
@@ -45,11 +46,12 @@ export function ImportsPage() {
   const { session, workspace, signOut } = useAuth();
   const { config, configError, configLoading, configRefreshing } = useCrmWorkspace();
   const [fileName, setFileName] = useState('');
+  const [allRows, setAllRows] = useState<Array<Record<string, string>>>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<Array<Record<string, string>>>([]);
   const [mappings, setMappings] = useState<ImportMappingInput[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [jobMessage, setJobMessage] = useState('');
+  const [importResult, setImportResult] = useState<ImportJobResult | null>(null);
 
   async function handleSignOut() {
     await signOut();
@@ -73,6 +75,47 @@ export function ImportsPage() {
     ];
   }, [config]);
 
+  usePageGuide({
+    key: 'imports-jobs',
+    title: 'Prepare a record import',
+    summary:
+      'Use this page to upload a CSV, map its columns to the shared workspace schema, and review preview rows before importing the records into the workspace.',
+    nextStep:
+      columns.length === 0
+        ? 'Choose a CSV file first so CoreFlow can inspect the columns and prepare the import.'
+        : 'Review the suggested column mappings, then run the import when the preview looks correct.',
+    highlights: ['CSV upload', 'Field mapping', 'Preview before import'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'imports-file',
+        title: 'Start with the CSV file',
+        body: 'Upload the source file here so CoreFlow can detect columns and suggest field mappings for this workspace.',
+        targetId: 'imports-file-input',
+      },
+      {
+        id: 'imports-create-job',
+        title: 'Run the import',
+        body: 'This action creates the import job, stores all parsed rows, and imports records using the selected field mappings.',
+        targetId: 'imports-create-job',
+        placement: 'left',
+      },
+      {
+        id: 'imports-mapping',
+        title: 'Verify the column mapping',
+        body: 'Use the mapping section to connect each incoming column to the correct core or custom field in the shared CRM schema.',
+        targetId: 'imports-mapping-card',
+      },
+      {
+        id: 'imports-preview',
+        title: 'Check the preview rows',
+        body: 'The preview is the last quick validation step before users trust the import setup and move forward.',
+        targetId: 'imports-preview-card',
+        placement: 'top',
+      },
+    ],
+  });
+
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -83,8 +126,10 @@ export function ImportsPage() {
     setFileName(file.name);
     const text = await file.text();
     const parsed = parseCsv(text);
+    setAllRows(parsed.rows);
     setColumns(parsed.columns);
     setPreviewRows(parsed.rows.slice(0, 25));
+    setImportResult(null);
     setMappings(
       parsed.columns
         .map((column) => guessMapping(column, config))
@@ -121,11 +166,18 @@ export function ImportsPage() {
       const result = await createImportJob(session, {
         workspace_id: workspace.id,
         file_name: fileName,
-        preview_rows: previewRows,
+        rows: allRows,
         mappings,
       });
-      setJobMessage(result.message);
-      toast.success('Import scaffold created.');
+      setImportResult(result);
+
+      if (result.failedCount === 0) {
+        toast.success(result.message);
+      } else if (result.importedCount === 0) {
+        toast.error(result.message);
+      } else {
+        toast.success(result.message);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create import job.';
       toast.error(message);
@@ -144,7 +196,7 @@ export function ImportsPage() {
         <PageHeader
           eyebrow="Imports"
           title="Import jobs"
-          description="Create CSV import jobs, map columns to workspace fields, and validate preview rows before execution."
+          description="Upload a CSV, map columns to workspace fields, preview the data, and import records into the shared CRM."
         />
 
         {configRefreshing ? (
@@ -158,6 +210,7 @@ export function ImportsPage() {
                 <span className="font-medium">CSV file</span>
                 <input
                   type="file"
+                  data-guide-id="imports-file-input"
                   accept=".csv,text/csv"
                   onChange={(event) => void handleFileChange(event)}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-indigo-600"
@@ -166,14 +219,14 @@ export function ImportsPage() {
               <Button
                 type="button"
                 size="sm"
+                data-guide-id="imports-create-job"
                 onClick={() => void handleCreateJob()}
                 loading={submitting}
-                disabled={!fileName}
+                disabled={!fileName || allRows.length === 0}
               >
-                Create import job scaffold
+                Import records
               </Button>
             </div>
-            {jobMessage ? <p className="mt-4 text-sm text-emerald-600">{jobMessage}</p> : null}
           </Card>
         ) : configError ? (
           <Card className="border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{configError}</Card>
@@ -181,8 +234,48 @@ export function ImportsPage() {
           <SectionSkeleton title="Import tools" rows={4} />
         ) : null}
 
-        {config && columns.length > 0 ? (
+        {importResult ? (
           <Card className="p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-600">Latest import</div>
+                <h3 className="mt-2 font-display text-2xl text-slate-900">{importResult.message}</h3>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Job status: <span className="font-medium text-slate-900">{importResult.job.status}</span>
+              </div>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Total rows</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{importResult.totalRows}</div>
+              </div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.22em] text-emerald-700">Imported</div>
+                <div className="mt-1 text-2xl font-semibold text-emerald-900">{importResult.importedCount}</div>
+              </div>
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.22em] text-rose-700">Failed</div>
+                <div className="mt-1 text-2xl font-semibold text-rose-900">{importResult.failedCount}</div>
+              </div>
+            </div>
+            {importResult.failures.length > 0 ? (
+              <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
+                <div className="text-sm font-semibold text-rose-900">Row issues</div>
+                <div className="mt-3 space-y-2 text-sm text-rose-800">
+                  {importResult.failures.map((failure) => (
+                    <p key={`${failure.rowIndex}-${failure.error}`}>
+                      Row {failure.rowIndex + 1}: {failure.error}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {config && columns.length > 0 ? (
+          <Card className="p-6" data-guide-id="imports-mapping-card">
             <h3 className="font-display text-2xl text-slate-900">Column mapping</h3>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {columns.map((column) => (
@@ -206,7 +299,7 @@ export function ImportsPage() {
         ) : null}
 
         {config && previewRows.length > 0 ? (
-          <Card className="overflow-x-auto p-6">
+          <Card className="overflow-x-auto p-6" data-guide-id="imports-preview-card">
             <h3 className="font-display text-2xl text-slate-900">Preview rows</h3>
             <table className="mt-6 min-w-full border-separate border-spacing-y-2 text-sm text-slate-700">
               <thead>

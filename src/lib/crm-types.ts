@@ -187,8 +187,30 @@ export interface ImportJobInput {
   workspace_id: string;
   entity_type?: 'record';
   file_name: string;
-  preview_rows: Array<Record<string, unknown>>;
+  rows: Array<Record<string, unknown>>;
   mappings: ImportMappingInput[];
+}
+
+export interface ImportJobResult {
+  job: {
+    id: string;
+    file_name: string;
+    status: string;
+    total_rows: number | null;
+    success_rows: number | null;
+    failed_rows: number | null;
+    created_at: string;
+    updated_at: string;
+  };
+  importExecutionImplemented: boolean;
+  totalRows: number;
+  importedCount: number;
+  failedCount: number;
+  failures: Array<{
+    rowIndex: number;
+    error: string;
+  }>;
+  message: string;
 }
 
 export interface RecordPageContext {

@@ -2,12 +2,13 @@ import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { authenticateRequest, ensureWorkspaceOwner, type EdgeClient } from '../_shared/server.ts';
 import {
   TelnyxNumberProvisioningError,
-  findAvailableUsPhoneNumber,
-  normalizePhase1UsPhoneNumber,
+  findAvailablePhoneNumber,
+  normalizeE164Number,
   purchaseManagedPhoneNumber,
   reconcileManagedPhoneNumber,
   resolveManagedVoiceConnectionId,
 } from '../_shared/telnyx-numbers.ts';
+import { isAllowedVoiceNumberCountryCode } from '../_shared/voice-number-country-options.ts';
 import {
   claimWorkspacePhoneNumberProvisioning,
   findWorkspacePhoneNumberByE164AnyStatus,
@@ -127,6 +128,7 @@ Deno.serve(async (request) => {
   let label: string | null = null;
   let voiceMode = 'ai_lead_capture';
   let phoneNumber = '';
+  let countryCode = 'US';
   let claimedNumber: WorkspacePhoneNumberRow | null = null;
 
   try {
@@ -141,12 +143,16 @@ Deno.serve(async (request) => {
     workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
     label = normalizeLabel(payload.label);
     voiceMode = normalizeVoiceMode(payload.voice_mode);
+    countryCode =
+      typeof payload.country_code === 'string' && isAllowedVoiceNumberCountryCode(payload.country_code.trim().toUpperCase())
+        ? payload.country_code.trim().toUpperCase()
+        : 'US';
 
     if (!workspaceId) {
       return jsonResponse({ error: 'workspace_id is required.' }, 400);
     }
 
-    phoneNumber = normalizePhase1UsPhoneNumber(payload.phone_number, 'phone_number');
+    phoneNumber = normalizeE164Number(payload.phone_number, 'phone_number');
     await ensureWorkspaceOwner(authContext.serviceClient, workspaceId, authContext.user.id);
 
     const connectionId = resolveManagedVoiceConnectionId();
@@ -158,11 +164,11 @@ Deno.serve(async (request) => {
     }
 
     if (!existing) {
-      const purchasableNumber = await findAvailableUsPhoneNumber({ phoneNumber });
+      const purchasableNumber = await findAvailablePhoneNumber({ phoneNumber, countryCode });
 
       if (!purchasableNumber) {
         return jsonResponse(
-          { error: 'This number is not currently available for US voice provisioning.' },
+          { error: `This number is not currently available for ${countryCode} voice provisioning.` },
           400,
         );
       }
@@ -178,6 +184,7 @@ Deno.serve(async (request) => {
         telnyxConnectionId: connectionId,
         telnyxMetadata: {
           searched_number: purchasableNumber.phoneNumber,
+          country_code: purchasableNumber.countryCode ?? countryCode,
         },
         isActive: false,
         provisioningLockedAt: null,
@@ -243,7 +250,7 @@ Deno.serve(async (request) => {
       });
     }
 
-    const purchasableNumber = await findAvailableUsPhoneNumber({ phoneNumber });
+    const purchasableNumber = await findAvailablePhoneNumber({ phoneNumber, countryCode });
 
     if (!purchasableNumber) {
       const number = await persistProvisionedNumber(authContext.serviceClient, {

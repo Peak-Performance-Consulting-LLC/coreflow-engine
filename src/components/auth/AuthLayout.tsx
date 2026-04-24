@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { crmOptions } from '../../lib/constants';
+import { GuideHelperCard } from '../guidance/GuideHelperCard';
 import { AnimatedBackground } from '../ui/AnimatedBackground';
 import { LogoMark } from '../ui/LogoMark';
 import { cn } from '../../lib/utils';
@@ -97,6 +98,7 @@ export function AuthLayout({
                   <p className="mt-3 max-w-2xl text-base leading-8 text-slate-600">{description}</p>
                 </div>
               </div>
+              <GuideHelperCard variant="auth" />
               {children}
               <div className="border-t border-slate-300 pt-6 text-sm text-slate-600">{footer}</div>
             </div>
