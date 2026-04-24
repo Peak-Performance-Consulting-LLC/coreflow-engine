@@ -1,5 +1,5 @@
 // AuthLayout.tsx
-import { motion } from 'framer-motion';
+import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { crmOptions } from '../../lib/constants';
@@ -48,6 +48,13 @@ export function AuthLayout({
   leftPanel,
   rightPanelClassName,
 }: AuthLayoutProps) {
+  const { scrollY } = useScroll();
+  const leftPanelFollowY = useSpring(useTransform(scrollY, [0, 900], [0, 96]), {
+    stiffness: 90,
+    damping: 22,
+    mass: 0.4,
+  });
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <AnimatedBackground />
@@ -60,8 +67,9 @@ export function AuthLayout({
         >
           <motion.aside
             variants={itemVariants}
-            className="hidden self-start rounded-[40px] border border-white/30 bg-white/15 backdrop-blur-xl shadow-2xl xl:sticky xl:top-6 xl:flex xl:flex-col"
+            className="hidden self-start rounded-[40px] border border-white/30 bg-white/15 backdrop-blur-xl shadow-2xl xl:sticky xl:top-6 xl:flex xl:max-h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden"
             style={{
+              y: leftPanelFollowY,
               background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.08) 100%)',
             }}
           >

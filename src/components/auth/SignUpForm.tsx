@@ -1,5 +1,5 @@
 // SignUpForm.tsx
-import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, Rocket, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, Rocket, CheckCircle2, X, Shuffle } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,11 +9,11 @@ import { completeSignup } from '../../lib/auth-helpers';
 import { getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils';
 import type { CRMType } from '../../lib/types';
+import { crmOptions } from '../../lib/constants';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';
-import { CRMSelector } from '../ui/CRMSelector';
 import { SignupStepIndicator } from './SignupStepIndicator';
 
 type FormErrors = Partial<
@@ -60,13 +60,19 @@ export function SignUpForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [workspaceSlug, setWorkspaceSlug] = useState('');
-  const [crmType, setCrmType] = useState<CRMType>('real-estate');
+  const [crmType, setCrmType] = useState<CRMType | ''>('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [modePickerOpen, setModePickerOpen] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const selectedCrm = crmOptions.find((option) => option.value === crmType);
+  const SelectedCrmIcon = selectedCrm?.icon ?? Sparkles;
+  const previewUrl = `${typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}${
+    workspaceSlug || 'your-workspace'
+  }`;
 
   function validateAccountStep() {
     const nextErrors: FormErrors = {};
@@ -174,7 +180,7 @@ export function SignUpForm() {
           full_name: fullName.trim(),
           workspace_name: workspaceName.trim(),
           workspace_slug: workspaceSlug.trim(),
-          crm_type: crmType,
+          crm_type: crmType as CRMType,
         },
         session,
       );
@@ -315,46 +321,15 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="relative overflow-hidden rounded-[28px] border border-white/70 bg-white/55 p-4 shadow-panel backdrop-blur-md sm:p-5"
+              className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white/75 p-4 shadow-panel backdrop-blur-md"
             >
               <motion.div
-                className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-gradient-to-br from-fuchsia-400/25 via-indigo-400/20 to-cyan-300/25 blur-3xl"
-                animate={{ scale: [1, 1.22, 1], rotate: [0, 90, 0], opacity: [0.45, 0.75, 0.45] }}
-                transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
+                className="pointer-events-none absolute -right-14 -top-16 h-36 w-36 rounded-full bg-gradient-to-br from-fuchsia-300/25 to-cyan-300/25 blur-3xl"
+                animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0.8, 0.4] }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
               />
-              <motion.div
-                className="pointer-events-none absolute -bottom-16 left-1/3 h-32 w-32 rounded-full border border-indigo-300/25"
-                animate={{ scale: [0.8, 1.35, 0.8], opacity: [0.25, 0.6, 0.25] }}
-                transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
-                {[0, 1, 2, 3].map((index) => (
-                  <motion.span
-                    key={index}
-                    className="absolute h-1.5 w-1.5 rounded-full bg-indigo-500/50 shadow-[0_0_16px_rgba(79,70,229,0.55)]"
-                    style={{ left: `${16 + index * 21}%`, top: `${18 + (index % 2) * 54}%` }}
-                    animate={{
-                      y: [0, index % 2 === 0 ? -18 : 18, 0],
-                      x: [0, index % 2 === 0 ? 10 : -10, 0],
-                      opacity: [0.15, 0.85, 0.15],
-                    }}
-                    transition={{ duration: 2.2 + index * 0.25, repeat: Infinity, ease: 'easeInOut' }}
-                  />
-                ))}
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="relative rounded-3xl border border-white/80 bg-white/70 p-4 shadow-sm"
-              >
-                <motion.div
-                  className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent"
-                  animate={{ x: ['-100%', '980%'] }}
-                  transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <div className="relative flex items-center gap-3">
+              <div className="relative grid gap-3">
+                <div className="flex items-center gap-3">
                   <motion.div
                     className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white shadow-glow"
                     animate={{ rotate: [0, -8, 8, 0], y: [0, -3, 0] }}
@@ -362,129 +337,111 @@ export function SignUpForm() {
                   >
                     <Rocket className="h-5 w-5" />
                   </motion.div>
-                  <div>
-                    <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">Workspace setup</h2>
-                    <p className="mt-1 text-xs text-slate-600">Create the space, choose the operating mode, and launch.</p>
+                  <div className="min-w-0">
+                    <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700">Workspace setup</h2>
+                    <p className="mt-1 text-xs text-slate-600">Compact launch details.</p>
                   </div>
                 </div>
-              </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="relative mt-4 space-y-4"
-              >
-                <motion.div
-                  className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white p-4 shadow-panel sm:p-5"
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, ease: smoothEase }}
-                >
-                  <motion.div
-                    className="absolute -right-20 -top-20 h-44 w-44 rounded-full bg-cyan-300/25 blur-3xl"
-                    animate={{ scale: [1, 1.25, 1], opacity: [0.35, 0.75, 0.35] }}
-                    transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    label="Workspace name"
+                    placeholder="CoreFlow Ventures"
+                    value={workspaceName}
+                    onChange={(event) => updateWorkspaceName(event.target.value)}
+                    error={errors.workspaceName}
                   />
-                  <motion.div
-                    className="absolute inset-0 bg-[linear-gradient(115deg,transparent,rgba(99,102,241,0.10),transparent)]"
-                    animate={{ x: ['-120%', '120%'] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  <Input
+                    label="Workspace slug"
+                    placeholder="coreflow-ventures"
+                    value={workspaceSlug}
+                    onChange={(event) => {
+                      setSlugTouched(true);
+                      setWorkspaceSlug(slugify(event.target.value));
+                    }}
+                    error={errors.workspaceSlug}
+                    hint="Lowercase letters, numbers, and hyphens."
                   />
-                  <div className="relative space-y-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-indigo-700">
-                          Workspace identity
-                        </span>
-                        <p className="mt-1 text-xs text-slate-600">Name your workspace and create its access URL.</p>
-                      </div>
-                      <motion.span
-                        className="w-fit rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-700"
-                        animate={{ boxShadow: ['0 0 0 rgba(79,70,229,0)', '0 0 18px rgba(79,70,229,0.18)', '0 0 0 rgba(79,70,229,0)'] }}
-                        transition={{ duration: 1.8, repeat: Infinity }}
-                      >
-                        Live preview
-                      </motion.span>
-                    </div>
+                </div>
 
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-                        <Input
-                          label="Workspace name"
-                          placeholder="CoreFlow Ventures"
-                          value={workspaceName}
-                          onChange={(event) => updateWorkspaceName(event.target.value)}
-                          error={errors.workspaceName}
-                        />
-                      </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-                        <Input
-                          label="Workspace slug"
-                          placeholder="coreflow-ventures"
-                          value={workspaceSlug}
-                          onChange={(event) => {
-                            setSlugTouched(true);
-                            setWorkspaceSlug(slugify(event.target.value));
-                          }}
-                          error={errors.workspaceSlug}
-                          hint="Use lowercase letters, numbers, and hyphens."
-                        />
-                      </div>
-                    </div>
-
-                    <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3">
-                      <motion.div
-                        className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-transparent via-indigo-300/30 to-transparent"
-                        animate={{ x: ['-100%', '520%'] }}
-                        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                      />
-                      <div className="relative text-[10px] uppercase tracking-[0.22em] text-indigo-700">Preview URL</div>
-                      <div className="relative mt-1 break-all font-display text-sm font-semibold text-slate-900">
-                        {`${typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}${workspaceSlug || 'your-workspace'}`}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white p-4 shadow-panel sm:p-5"
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.08, duration: 0.5, ease: smoothEase }}
-                >
-                  <motion.div
-                    className="absolute -left-20 top-1/2 h-36 w-36 rounded-full bg-fuchsia-300/20 blur-3xl"
-                    animate={{ y: ['-50%', '-62%', '-50%'], scale: [1, 1.18, 1] }}
-                    transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
-                  />
-                  <div className="relative">
-                    <CRMSelector
-                      value={crmType}
-                      onChange={setCrmType}
-                      error={errors.crmType}
-                      title="Pick your mode"
-                      subtitle="Animated routing"
-                      variant="launch"
+                <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-stretch">
+                  <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3">
+                    <motion.span
+                      className="pointer-events-none absolute right-3 top-3 h-2 w-2 rounded-full bg-indigo-500"
+                      animate={{ scale: [0.8, 1.6, 0.8], opacity: [0.35, 0.9, 0.35] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
                     />
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-indigo-700">Preview URL</div>
+                    <div className="mt-1 break-all font-display text-sm font-semibold text-slate-900">{previewUrl}</div>
                   </div>
-                </motion.div>
-              </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="relative mt-4 space-y-2"
-              >
+                  <motion.button
+                    type="button"
+                    onClick={() => setModePickerOpen(true)}
+                    className="group relative flex min-w-[250px] items-center gap-3 overflow-hidden rounded-2xl border-2 border-accent-blue/35 bg-white p-3 text-left shadow-glow transition hover:-translate-y-0.5 hover:border-accent-blue/70 hover:shadow-2xl"
+                    animate={{
+                      y: [0, -3, 0],
+                      boxShadow: [
+                        '0 0 0 rgba(79,70,229,0.12)',
+                        '0 16px 36px rgba(79,70,229,0.26)',
+                        '0 0 0 rgba(79,70,229,0.12)',
+                      ],
+                    }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                    whileHover={{ scale: 1.025 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <motion.div
+                      className="pointer-events-none absolute -inset-1 rounded-[18px] border border-accent-blue/30"
+                      animate={{ scale: [1, 1.04, 1], opacity: [0.35, 0.9, 0.35] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/16 via-cyan-400/10 to-fuchsia-400/12 opacity-95" />
+                    <motion.span
+                      className="pointer-events-none absolute right-11 top-3 h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.75)]"
+                      animate={{ scale: [0.8, 1.7, 0.8], opacity: [0.35, 1, 0.35] }}
+                      transition={{ duration: 1.25, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <motion.div
+                      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-accent-blue/25 bg-white text-accent-blue shadow-sm"
+                      animate={{ rotate: [0, -5, 5, 0], scale: [1, 1.06, 1] }}
+                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <SelectedCrmIcon className="h-5 w-5" />
+                    </motion.div>
+                    <div className="relative min-w-0 flex-1">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">CRM mode</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {selectedCrm ? (
+                          <>
+                            <span className="font-display text-sm font-semibold text-slate-900">{selectedCrm.label}</span>
+                            <span className="rounded-full border border-accent-blue/25 bg-white/85 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-accent-blue">
+                              is selected
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-display text-sm font-semibold text-slate-900">Select a CRM mode</span>
+                        )}
+                      </div>
+                    </div>
+                    <motion.div
+                      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-blue text-white shadow-sm"
+                      animate={{ rotate: [0, 12, -12, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 0.4 }}
+                    >
+                      <Shuffle className="h-4 w-4" />
+                    </motion.div>
+                  </motion.button>
+                </div>
+
                 <motion.label
                   whileHover={{ y: -2, scale: 1.005 }}
-                  className="group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border border-white/80 bg-white/70 p-3 text-xs leading-5 text-slate-700 shadow-sm"
+                  className="group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border border-indigo-100 bg-white/80 p-3 text-xs leading-5 text-slate-700 shadow-sm"
                 >
                   <motion.span
-                    className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-indigo-200/45 to-transparent"
-                    animate={{ x: ['0%', '430%'] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    className="pointer-events-none absolute right-4 top-4 h-2 w-2 rounded-full bg-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.55)]"
+                    animate={{ scale: [0.8, 1.5, 0.8], opacity: [0.35, 0.9, 0.35] }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                   />
                   <input
                     type="checkbox"
@@ -504,11 +461,112 @@ export function SignUpForm() {
                   </span>
                 </motion.label>
                 {errors.terms ? <p className="text-xs text-rose-500 animate-shake">{errors.terms}</p> : null}
-              </motion.div>
+              </div>
             </motion.section>
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {modePickerOpen ? (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-white p-4 shadow-2xl sm:p-5"
+              initial={{ opacity: 0, scale: 0.9, y: 26, rotate: -1.5 }}
+              animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 18, rotate: 1.5 }}
+              transition={{ duration: 0.28, ease: smoothEase }}
+            >
+              <motion.div
+                className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-gradient-to-br from-indigo-300/35 to-cyan-300/25 blur-3xl"
+                animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.85, 0.5] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <motion.div
+                className="pointer-events-none absolute -bottom-16 -left-12 h-36 w-36 rounded-full border border-fuchsia-300/40"
+                animate={{ rotate: [0, 360], scale: [1, 1.12, 1] }}
+                transition={{
+                  rotate: { duration: 8, repeat: Infinity, ease: 'linear' },
+                  scale: { duration: 2.6, repeat: Infinity, ease: 'easeInOut' },
+                }}
+              />
+
+              <div className="relative flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-indigo-700">Choose mode</div>
+                  <h3 className="mt-1 font-display text-xl font-semibold text-slate-950">Pick your workspace engine</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModePickerOpen(false)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-slate-950"
+                  aria-label="Close mode picker"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="relative mt-4 grid gap-3 sm:grid-cols-2">
+                {crmOptions.map((option, index) => {
+                  const Icon = option.icon;
+                  const isSelected = option.value === crmType;
+
+                  return (
+                    <motion.button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setCrmType(option.value);
+                        setModePickerOpen(false);
+                      }}
+                      className={`group relative overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition ${
+                        isSelected
+                          ? 'border-accent-blue/60 bg-indigo-50 shadow-glow'
+                          : 'border-slate-200 bg-white hover:-translate-y-1 hover:border-indigo-200 hover:shadow-panel'
+                      }`}
+                      initial={{ opacity: 0, y: 18, rotate: index % 2 === 0 ? -1.5 : 1.5 }}
+                      animate={{ opacity: 1, y: 0, rotate: 0 }}
+                      transition={{ delay: index * 0.04, duration: 0.28 }}
+                      whileHover={{ scale: 1.015 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className={`absolute inset-0 bg-gradient-to-br ${option.accent} opacity-40`} />
+                      <motion.span
+                        className="absolute bottom-3 right-3 h-2 w-2 rounded-full bg-indigo-400/70 shadow-[0_0_14px_rgba(99,102,241,0.55)]"
+                        animate={{ scale: [0.7, 1.35, 0.7], opacity: [0.3, 0.9, 0.3] }}
+                        transition={{ duration: 1.8 + index * 0.1, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                      <div className="relative flex items-center gap-3 pr-8">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white text-accent-blue shadow-sm">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-display text-sm font-semibold text-slate-950">{option.label}</div>
+                          <div className="mt-0.5 text-xs leading-4 text-slate-600">{option.description}</div>
+                        </div>
+                      </div>
+                      {isSelected ? (
+                        <motion.span
+                          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white text-accent-blue shadow-sm"
+                          animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.1, 1] }}
+                          transition={{ duration: 1.3, repeat: Infinity, repeatDelay: 1 }}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </motion.span>
+                      ) : null}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -533,8 +591,10 @@ export function SignUpForm() {
         <Button
           type="submit"
           size="sm"
-          className="w-full sm:w-auto group relative h-8 overflow-hidden px-4 text-xs"
+          className="w-full sm:w-auto group relative h-8 overflow-hidden px-4 text-xs disabled:hover:bg-indigo-600"
           loading={loading}
+          disabled={step === 2 && !crmType}
+          title={step === 2 && !crmType ? 'Select a CRM mode before starting your workspace.' : undefined}
         >
           <span className="relative z-10">
             {step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}

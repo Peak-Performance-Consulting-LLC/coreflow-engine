@@ -78,6 +78,16 @@ export function CRMSelector({
               )}
             >
               <div className={cn('absolute inset-0 bg-gradient-to-br opacity-25', option.accent, isLaunch && 'opacity-35')} />
+              {isLaunch && isSelected ? (
+                <motion.span
+                  className="absolute right-2 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border border-accent-blue/30 bg-white text-accent-blue shadow-sm"
+                  animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.1, 1] }}
+                  transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
+                  aria-label="Selected"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </motion.span>
+              ) : null}
               {isLaunch ? (
                 <>
                   <motion.div
@@ -86,9 +96,9 @@ export function CRMSelector({
                     transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
                   />
                   <motion.div
-                    className="absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent"
-                    animate={{ x: ['0%', '310%'] }}
-                    transition={{ duration: 2.8 + index * 0.2, repeat: Infinity, ease: 'easeInOut', delay: index * 0.2 }}
+                    className="absolute bottom-3 right-3 h-2 w-2 rounded-full bg-indigo-400/60 shadow-[0_0_14px_rgba(99,102,241,0.5)]"
+                    animate={{ scale: [0.7, 1.45, 0.7], opacity: [0.25, 0.85, 0.25] }}
+                    transition={{ duration: 1.8 + index * 0.12, repeat: Infinity, ease: 'easeInOut', delay: index * 0.16 }}
                   />
                 </>
               ) : null}
@@ -113,21 +123,11 @@ export function CRMSelector({
                     </span>
                   ) : null}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className={cn('min-w-0 flex-1', isLaunch && isSelected && 'pr-6')}>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className={cn('font-display text-base font-semibold text-slate-900', isLaunch && 'text-sm leading-5')}>
+                    <h3 className={cn('font-display text-base font-semibold text-slate-900', isLaunch && 'text-sm leading-5 pr-1')}>
                       {option.label}
                     </h3>
-                    {isLaunch && isSelected ? (
-                      <motion.span
-                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-accent-blue/30 bg-accent-blue/12 p-1 text-accent-blue"
-                        animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.1, 1] }}
-                        transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
-                        aria-label="Selected"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      </motion.span>
-                    ) : null}
                   </div>
                   <p className={cn('mt-1 text-xs leading-5 text-slate-600', isLaunch && 'leading-4')}>
                     {option.description}
