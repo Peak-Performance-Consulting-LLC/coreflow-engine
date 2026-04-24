@@ -1,5 +1,5 @@
 // SignUpForm.tsx
-import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, Rocket, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -191,7 +191,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="relative space-y-4" onSubmit={handleSubmit}>
+    <form className="relative space-y-3.5" onSubmit={handleSubmit}>
       <motion.div
         className="pointer-events-none absolute -right-2 -top-3 hidden h-16 w-16 sm:block"
         animate={{ rotate: [0, 10, -8, 0], scale: [1, 1.05, 0.98, 1] }}
@@ -220,7 +220,7 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="space-y-4"
+              className="space-y-3.5"
             >
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -266,7 +266,7 @@ export function SignUpForm() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
-                className="grid gap-4 lg:grid-cols-2"
+                className="grid gap-3.5 lg:grid-cols-2"
               >
                 <Input
                   label="Password"
@@ -315,24 +315,65 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="space-y-4"
+              className="relative overflow-hidden rounded-[28px] border border-white/70 bg-white/55 p-4 shadow-panel backdrop-blur-md sm:p-5"
             >
+              <motion.div
+                className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-gradient-to-br from-fuchsia-400/25 via-indigo-400/20 to-cyan-300/25 blur-3xl"
+                animate={{ scale: [1, 1.22, 1], rotate: [0, 90, 0], opacity: [0.45, 0.75, 0.45] }}
+                transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <motion.div
+                className="pointer-events-none absolute -bottom-16 left-1/3 h-32 w-32 rounded-full border border-indigo-300/25"
+                animate={{ scale: [0.8, 1.35, 0.8], opacity: [0.25, 0.6, 0.25] }}
+                transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[28px]">
+                {[0, 1, 2, 3].map((index) => (
+                  <motion.span
+                    key={index}
+                    className="absolute h-1.5 w-1.5 rounded-full bg-indigo-500/50 shadow-[0_0_16px_rgba(79,70,229,0.55)]"
+                    style={{ left: `${16 + index * 21}%`, top: `${18 + (index % 2) * 54}%` }}
+                    animate={{
+                      y: [0, index % 2 === 0 ? -18 : 18, 0],
+                      x: [0, index % 2 === 0 ? 10 : -10, 0],
+                      opacity: [0.15, 0.85, 0.15],
+                    }}
+                    transition={{ duration: 2.2 + index * 0.25, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                ))}
+              </div>
+
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
+                className="relative rounded-3xl border border-white/80 bg-white/70 p-4 shadow-sm"
               >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-accent-blue" />
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Workspace setup</h2>
+                <motion.div
+                  className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-transparent via-cyan-200/35 to-transparent"
+                  animate={{ x: ['-100%', '980%'] }}
+                  transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="relative flex items-center gap-3">
+                  <motion.div
+                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white shadow-glow"
+                    animate={{ rotate: [0, -8, 8, 0], y: [0, -3, 0] }}
+                    transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <Rocket className="h-5 w-5" />
+                  </motion.div>
+                  <div>
+                    <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">Workspace setup</h2>
+                    <p className="mt-1 text-xs text-slate-600">Create the space, choose the operating mode, and launch.</p>
+                  </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-600">Now create your workspace and choose your business template.</p>
               </motion.div>
 
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
+                className="relative mt-4"
               >
                 <WorkspaceSetupFields
                   workspaceName={workspaceName}
@@ -348,6 +389,7 @@ export function SignUpForm() {
                   singleColumn
                   showSlugPreview
                   slugPreviewPrefix={typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}
+                  variant="launch"
                 />
               </motion.div>
 
@@ -355,19 +397,34 @@ export function SignUpForm() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="space-y-2"
+                className="relative mt-4 space-y-2"
               >
-                <label className="inline-flex items-start gap-3 text-xs leading-5 text-slate-700">
+                <motion.label
+                  whileHover={{ y: -2, scale: 1.005 }}
+                  className="group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border border-white/80 bg-white/70 p-3 text-xs leading-5 text-slate-700 shadow-sm"
+                >
+                  <motion.span
+                    className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-indigo-200/45 to-transparent"
+                    animate={{ x: ['0%', '430%'] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  />
                   <input
                     type="checkbox"
                     checked={termsAccepted}
                     onChange={(event) => setTermsAccepted(event.target.checked)}
-                    className="mt-1 h-4 w-4 rounded border-indigo-200 bg-white text-accent-blue focus:ring-accent-blue focus:ring-2 transition-all"
+                    className="peer sr-only"
                   />
-                  <span>
+                  <motion.span
+                    className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-white shadow-sm transition peer-checked:border-accent-blue peer-checked:bg-accent-blue"
+                    animate={termsAccepted ? { rotate: [0, -10, 10, 0], scale: [1, 1.12, 1] } : undefined}
+                    transition={{ duration: 0.45 }}
+                  >
+                    {termsAccepted ? <CheckCircle2 className="h-4 w-4" /> : null}
+                  </motion.span>
+                  <span className="relative">
                     I agree to the terms, privacy expectations, and workspace ownership rules for this launch build.
                   </span>
-                </label>
+                </motion.label>
                 {errors.terms ? <p className="text-xs text-rose-500 animate-shake">{errors.terms}</p> : null}
               </motion.div>
             </motion.section>

@@ -67,7 +67,7 @@ export function AuthLayout({
           >
             <div className="absolute inset-0 rounded-[40px] bg-gradient-to-br from-accent-blue/10 to-transparent" />
             {leftPanel ? (
-              <div className="relative p-8 sm:p-9 lg:p-10 2xl:p-12">
+              <div className="relative p-7 sm:p-8 lg:p-9 2xl:p-10">
                 {leftPanel}
               </div>
             ) : (
@@ -148,12 +148,12 @@ export function AuthLayout({
             />
             <div className="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-gradient-to-br from-accent-blue/15 to-purple-500/15 blur-3xl" />
             <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-gradient-to-tr from-cyan-500/15 to-accent-blue/15 blur-3xl" />
-            <div className="relative p-6 sm:p-8 md:p-9 lg:p-10">
-              <motion.div variants={containerVariants} className="relative space-y-5">
+            <div className="relative p-5 sm:p-7 md:p-8 lg:p-8">
+              <motion.div variants={containerVariants} className="relative space-y-4">
                 <motion.div variants={itemVariants} className="xl:hidden">
                   <LogoMark />
                 </motion.div>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <motion.div
                     variants={itemVariants}
                     className="inline-flex rounded-full border border-slate-200 bg-white/90 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-700 backdrop-blur-sm shadow-sm"
@@ -169,7 +169,7 @@ export function AuthLayout({
                     </motion.h1>
                     <motion.p
                       variants={itemVariants}
-                      className="mt-3 max-w-2xl text-base leading-7 text-slate-700"
+                      className="mt-2 max-w-2xl text-base leading-7 text-slate-700"
                     >
                       {description}
                     </motion.p>

@@ -10,6 +10,7 @@ interface CRMSelectorProps {
   error?: string;
   title?: string;
   subtitle?: string;
+  variant?: 'default' | 'launch';
 }
 
 export function CRMSelector({
@@ -18,14 +19,21 @@ export function CRMSelector({
   error,
   title = 'Choose your workspace template',
   subtitle = 'Select the setup that best matches your business',
+  variant = 'default',
 }: CRMSelectorProps) {
+  const isLaunch = variant === 'launch';
+
   return (
-    <div className="space-y-3">
+    <div className={cn('space-y-2.5', isLaunch && 'space-y-3')}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-800">{title}</span>
-        <span className="text-xs text-slate-500">{subtitle}</span>
+        <span className={cn('text-xs font-semibold text-slate-800', isLaunch && 'uppercase tracking-[0.18em] text-indigo-700')}>
+          {title}
+        </span>
+        <span className={cn('text-xs text-slate-500', isLaunch && 'rounded-full bg-white/70 px-2 py-1 text-[10px] font-medium text-slate-600')}>
+          {subtitle}
+        </span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={cn('grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3', isLaunch && 'gap-3')}>
         {crmOptions.map((option, index) => {
           const Icon = option.icon;
           const isSelected = option.value === value;
@@ -34,37 +42,79 @@ export function CRMSelector({
             <motion.button
               key={option.value}
               type="button"
-              whileHover={{ y: -4, scale: 1.01 }}
+              whileHover={isLaunch ? { y: -8, scale: 1.025, rotate: index % 2 === 0 ? -0.6 : 0.6 } : { y: -4, scale: 1.01 }}
               whileTap={{ scale: 0.99 }}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
+              initial={isLaunch ? { opacity: 0, y: 22, rotate: index % 2 === 0 ? -2 : 2 } : { opacity: 0, y: 12 }}
+              animate={
+                isLaunch
+                  ? {
+                      opacity: 1,
+                      y: [0, index % 2 === 0 ? -3 : 3, 0],
+                      rotate: [0, index % 2 === 0 ? 0.45 : -0.45, 0],
+                    }
+                  : { opacity: 1, y: 0 }
+              }
+              transition={
+                isLaunch
+                  ? {
+                      opacity: { delay: index * 0.06, duration: 0.35 },
+                      y: { delay: index * 0.08, duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+                      rotate: { delay: index * 0.08, duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+                    }
+                  : { delay: index * 0.05 }
+              }
               onClick={() => onChange(option.value)}
               aria-pressed={isSelected}
               className={cn(
-                'group relative overflow-hidden rounded-2xl border p-3.5 text-left transition',
+                'group relative overflow-hidden rounded-2xl border p-3 text-left transition',
+                isLaunch && 'min-h-[132px] bg-white/75 shadow-sm backdrop-blur',
                 isSelected
-                  ? 'border-accent-blue/45 bg-slate-50 shadow-glow'
-                  : 'border-slate-300 bg-white hover:-translate-y-[2px] hover:border-indigo-200 hover:shadow-panel',
+                  ? isLaunch
+                    ? 'border-accent-blue/55 bg-white shadow-glow'
+                    : 'border-accent-blue/45 bg-slate-50 shadow-glow'
+                  : isLaunch
+                    ? 'border-white/70 hover:border-indigo-200 hover:bg-white hover:shadow-panel'
+                    : 'border-slate-300 bg-white hover:-translate-y-[2px] hover:border-indigo-200 hover:shadow-panel',
               )}
             >
-              <div className={cn('absolute inset-0 bg-gradient-to-br opacity-25', option.accent)} />
-              <div className={cn('absolute inset-[1px] rounded-[15px]', isSelected ? 'bg-slate-50' : 'bg-white')} />
-              <div className="relative space-y-2.5">
+              <div className={cn('absolute inset-0 bg-gradient-to-br opacity-25', option.accent, isLaunch && 'opacity-35')} />
+              {isLaunch ? (
+                <>
+                  <motion.div
+                    className="absolute -inset-10 bg-[conic-gradient(from_0deg,transparent,rgba(79,70,229,0.28),transparent,rgba(34,211,238,0.22),transparent)] opacity-0 blur-sm transition-opacity duration-300 group-hover:opacity-100"
+                    animate={{ rotate: [0, 360] }}
+                    transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+                  />
+                  <motion.div
+                    className="absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+                    animate={{ x: ['0%', '310%'] }}
+                    transition={{ duration: 2.8 + index * 0.2, repeat: Infinity, ease: 'easeInOut', delay: index * 0.2 }}
+                  />
+                </>
+              ) : null}
+              <div className={cn('absolute inset-[1px] rounded-[15px]', isSelected ? 'bg-slate-50' : 'bg-white', isLaunch && 'bg-white/[0.82]')} />
+              <div className="relative space-y-2">
                 <div className="flex items-center justify-between">
-                  <div
+                  <motion.div
+                    animate={isLaunch && isSelected ? { rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] } : undefined}
+                    transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
                     className={cn(
                       'flex h-9 w-9 items-center justify-center rounded-xl border text-accent-blue transition',
+                      isLaunch && 'shadow-sm',
                       isSelected ? 'border-accent-blue/30 bg-accent-blue/10' : 'border-slate-300 bg-slate-50',
                     )}
                   >
                     <Icon className="h-4 w-4" />
-                  </div>
+                  </motion.div>
                   {isSelected ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-accent-blue/30 bg-accent-blue/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-blue">
+                    <motion.span
+                      className="inline-flex items-center gap-1 rounded-full border border-accent-blue/30 bg-accent-blue/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-blue"
+                      animate={isLaunch ? { x: [0, 2, -2, 0] } : undefined}
+                      transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
+                    >
                       <CheckCircle2 className="h-3 w-3" />
                       Selected
-                    </span>
+                    </motion.span>
                   ) : null}
                 </div>
                 <div>

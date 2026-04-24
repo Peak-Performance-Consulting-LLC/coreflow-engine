@@ -52,7 +52,7 @@ export function SignupValuePanel() {
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="relative space-y-8"
+      className="relative space-y-6"
     >
       {/* Animated gradient orb */}
       <motion.div
@@ -94,7 +94,7 @@ export function SignupValuePanel() {
         <LogoMark />
       </motion.div>
 
-      <div className="space-y-4 relative">
+      <div className="space-y-3 relative">
         <motion.div
           variants={itemVariants}
           className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/70 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-indigo-700 shadow-sm backdrop-blur-sm"
@@ -109,7 +109,7 @@ export function SignupValuePanel() {
         </motion.div>
         <motion.h2
           variants={itemVariants}
-          className="max-w-xl font-display text-4xl font-bold leading-tight text-slate-950 2xl:text-[2.7rem]"
+          className="max-w-xl font-display text-3xl font-bold leading-tight text-slate-950 2xl:text-[2.4rem]"
         >
           Set up your AI-powered CRM in minutes
         </motion.h2>
@@ -121,7 +121,7 @@ export function SignupValuePanel() {
         </motion.p>
       </div>
 
-      <motion.div variants={containerVariants} className="relative space-y-3.5">
+      <motion.div variants={containerVariants} className="relative space-y-3">
         {valueBullets.map((bullet) => {
           const Icon = bullet.icon;
 
@@ -131,13 +131,13 @@ export function SignupValuePanel() {
               variants={itemVariants}
               whileHover={{ scale: 1.02, x: 8 }}
               transition={{ duration: 0.2 }}
-              className="group relative overflow-hidden rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm backdrop-blur-sm transition-all duration-300 hover:bg-white/75 hover:shadow-md"
+              className="group relative overflow-hidden rounded-2xl border border-white/70 bg-white/60 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:bg-white/75 hover:shadow-md"
             >
               <div className="relative z-10 flex items-center gap-3.5">
                 <motion.div
                   whileHover={{ rotate: 360, scale: 1.1 }}
                   transition={{ duration: 0.3 }}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-100 bg-white/80 text-indigo-700 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:scale-110"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-indigo-100 bg-white/80 text-indigo-700 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:scale-110"
                 >
                   <Icon className="h-5 w-5" />
                 </motion.div>
@@ -157,7 +157,7 @@ export function SignupValuePanel() {
       <motion.div
         variants={itemVariants}
         whileHover={{ scale: 1.02 }}
-        className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm backdrop-blur-sm"
+        className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/60 p-3.5 shadow-sm backdrop-blur-sm"
       >
         <div className="relative z-10 text-sm font-medium text-slate-700">
           Built for growing service businesses.
