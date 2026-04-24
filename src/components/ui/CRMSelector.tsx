@@ -33,7 +33,7 @@ export function CRMSelector({
           {subtitle}
         </span>
       </div>
-      <div className={cn('grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3', isLaunch && 'gap-3')}>
+      <div className={cn('grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3', isLaunch && 'gap-3 xl:grid-cols-2')}>
         {crmOptions.map((option, index) => {
           const Icon = option.icon;
           const isSelected = option.value === value;
@@ -67,7 +67,7 @@ export function CRMSelector({
               aria-pressed={isSelected}
               className={cn(
                 'group relative overflow-hidden rounded-2xl border p-3 text-left transition',
-                isLaunch && 'min-h-[132px] bg-white/75 shadow-sm backdrop-blur',
+                isLaunch && 'min-h-[112px] bg-white/75 shadow-sm backdrop-blur',
                 isSelected
                   ? isLaunch
                     ? 'border-accent-blue/55 bg-white shadow-glow'
@@ -93,8 +93,8 @@ export function CRMSelector({
                 </>
               ) : null}
               <div className={cn('absolute inset-[1px] rounded-[15px]', isSelected ? 'bg-slate-50' : 'bg-white', isLaunch && 'bg-white/[0.82]')} />
-              <div className="relative space-y-2">
-                <div className="flex items-center justify-between">
+              <div className={cn('relative space-y-2', isLaunch && 'flex h-full gap-3 space-y-0')}>
+                <div className={cn('flex items-center justify-between', isLaunch && 'shrink-0 items-start')}>
                   <motion.div
                     animate={isLaunch && isSelected ? { rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] } : undefined}
                     transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
@@ -106,20 +106,32 @@ export function CRMSelector({
                   >
                     <Icon className="h-4 w-4" />
                   </motion.div>
-                  {isSelected ? (
-                    <motion.span
-                      className="inline-flex items-center gap-1 rounded-full border border-accent-blue/30 bg-accent-blue/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-blue"
-                      animate={isLaunch ? { x: [0, 2, -2, 0] } : undefined}
-                      transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
-                    >
+                  {!isLaunch && isSelected ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-accent-blue/30 bg-accent-blue/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-blue">
                       <CheckCircle2 className="h-3 w-3" />
                       Selected
-                    </motion.span>
+                    </span>
                   ) : null}
                 </div>
-                <div>
-                  <h3 className="font-display text-base font-semibold text-slate-900">{option.label}</h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">{option.description}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className={cn('font-display text-base font-semibold text-slate-900', isLaunch && 'text-sm leading-5')}>
+                      {option.label}
+                    </h3>
+                    {isLaunch && isSelected ? (
+                      <motion.span
+                        className="inline-flex shrink-0 items-center justify-center rounded-full border border-accent-blue/30 bg-accent-blue/12 p-1 text-accent-blue"
+                        animate={{ rotate: [0, -10, 10, 0], scale: [1, 1.1, 1] }}
+                        transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
+                        aria-label="Selected"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </motion.span>
+                    ) : null}
+                  </div>
+                  <p className={cn('mt-1 text-xs leading-5 text-slate-600', isLaunch && 'leading-4')}>
+                    {option.description}
+                  </p>
                 </div>
               </div>
             </motion.button>

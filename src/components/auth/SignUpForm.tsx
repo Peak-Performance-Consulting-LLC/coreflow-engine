@@ -13,8 +13,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';
+import { CRMSelector } from '../ui/CRMSelector';
 import { SignupStepIndicator } from './SignupStepIndicator';
-import { WorkspaceSetupFields } from './WorkspaceSetupFields';
 
 type FormErrors = Partial<
   Record<
@@ -373,24 +373,102 @@ export function SignUpForm() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="relative mt-4"
+                className="relative mt-4 space-y-4"
               >
-                <WorkspaceSetupFields
-                  workspaceName={workspaceName}
-                  workspaceSlug={workspaceSlug}
-                  crmType={crmType}
-                  errors={errors}
-                  onWorkspaceNameChange={updateWorkspaceName}
-                  onWorkspaceSlugChange={(value) => {
-                    setSlugTouched(true);
-                    setWorkspaceSlug(slugify(value));
-                  }}
-                  onCrmTypeChange={setCrmType}
-                  singleColumn
-                  showSlugPreview
-                  slugPreviewPrefix={typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}
-                  variant="launch"
-                />
+                <motion.div
+                  className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white p-4 shadow-panel sm:p-5"
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, ease: smoothEase }}
+                >
+                  <motion.div
+                    className="absolute -right-20 -top-20 h-44 w-44 rounded-full bg-cyan-300/25 blur-3xl"
+                    animate={{ scale: [1, 1.25, 1], opacity: [0.35, 0.75, 0.35] }}
+                    transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                  <motion.div
+                    className="absolute inset-0 bg-[linear-gradient(115deg,transparent,rgba(99,102,241,0.10),transparent)]"
+                    animate={{ x: ['-120%', '120%'] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                  <div className="relative space-y-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-indigo-700">
+                          Workspace identity
+                        </span>
+                        <p className="mt-1 text-xs text-slate-600">Name your workspace and create its access URL.</p>
+                      </div>
+                      <motion.span
+                        className="w-fit rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-700"
+                        animate={{ boxShadow: ['0 0 0 rgba(79,70,229,0)', '0 0 18px rgba(79,70,229,0.18)', '0 0 0 rgba(79,70,229,0)'] }}
+                        transition={{ duration: 1.8, repeat: Infinity }}
+                      >
+                        Live preview
+                      </motion.span>
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                        <Input
+                          label="Workspace name"
+                          placeholder="CoreFlow Ventures"
+                          value={workspaceName}
+                          onChange={(event) => updateWorkspaceName(event.target.value)}
+                          error={errors.workspaceName}
+                        />
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                        <Input
+                          label="Workspace slug"
+                          placeholder="coreflow-ventures"
+                          value={workspaceSlug}
+                          onChange={(event) => {
+                            setSlugTouched(true);
+                            setWorkspaceSlug(slugify(event.target.value));
+                          }}
+                          error={errors.workspaceSlug}
+                          hint="Use lowercase letters, numbers, and hyphens."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-transparent via-indigo-300/30 to-transparent"
+                        animate={{ x: ['-100%', '520%'] }}
+                        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                      <div className="relative text-[10px] uppercase tracking-[0.22em] text-indigo-700">Preview URL</div>
+                      <div className="relative mt-1 break-all font-display text-sm font-semibold text-slate-900">
+                        {`${typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}${workspaceSlug || 'your-workspace'}`}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white p-4 shadow-panel sm:p-5"
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08, duration: 0.5, ease: smoothEase }}
+                >
+                  <motion.div
+                    className="absolute -left-20 top-1/2 h-36 w-36 rounded-full bg-fuchsia-300/20 blur-3xl"
+                    animate={{ y: ['-50%', '-62%', '-50%'], scale: [1, 1.18, 1] }}
+                    transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                  <div className="relative">
+                    <CRMSelector
+                      value={crmType}
+                      onChange={setCrmType}
+                      error={errors.crmType}
+                      title="Pick your mode"
+                      subtitle="Animated routing"
+                      variant="launch"
+                    />
+                  </div>
+                </motion.div>
               </motion.div>
 
               <motion.div
