@@ -94,25 +94,25 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 const SECTION_ACCENTS: Record<AccountSectionKey, { glow: string; icon: string; text: string; ring: string }> = {
   profile: {
     glow: 'from-indigo-500/16 via-cyan-400/10 to-transparent',
-    icon: 'border-indigo-200 bg-indigo-50 text-indigo-600',
+    icon: 'border-indigo-200 bg-gradient-to-br from-indigo-400 to-indigo-600 text-white shadow-lg shadow-indigo-500/30',
     text: 'text-indigo-700',
     ring: 'ring-indigo-200/70',
   },
   workspace: {
     glow: 'from-cyan-500/16 via-blue-400/10 to-transparent',
-    icon: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+    icon: 'border-cyan-200 bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/30',
     text: 'text-cyan-700',
     ring: 'ring-cyan-200/70',
   },
   security: {
     glow: 'from-emerald-500/16 via-teal-400/10 to-transparent',
-    icon: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    icon: 'border-emerald-200 bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/30',
     text: 'text-emerald-700',
     ring: 'ring-emerald-200/70',
   },
   preferences: {
     glow: 'from-fuchsia-500/16 via-violet-400/10 to-transparent',
-    icon: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+    icon: 'border-fuchsia-200 bg-gradient-to-br from-fuchsia-400 to-violet-600 text-white shadow-lg shadow-fuchsia-500/30',
     text: 'text-fuchsia-700',
     ring: 'ring-fuchsia-200/70',
   },
@@ -304,14 +304,16 @@ function SettingsNav({
                   className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-accent-blue"
                 />
               ) : null}
+
+              {/* Animated Icon for each section */}
               <motion.div
-                animate={active ? { rotate: [0, -7, 7, 0], scale: [1, 1.06, 1] } : undefined}
-                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                animate={active ? { rotate: [0, -5, 5, 0], scale: [1, 1.08, 1] } : { scale: 1 }}
+                transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
                 className={cn(
-                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition',
+                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-300',
                   active
                     ? accent.icon
-                    : 'border-slate-200 bg-slate-50 text-slate-500',
+                    : 'border-slate-200 bg-slate-50 text-slate-500 group-hover:scale-105 group-hover:shadow-md',
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -551,16 +553,16 @@ export function AccountPage() {
             : defaults.timezone,
         dateFormat:
           parsed.dateFormat === 'dd/mm/yyyy' ||
-          parsed.dateFormat === 'mm/dd/yyyy' ||
-          parsed.dateFormat === 'yyyy-mm-dd'
+            parsed.dateFormat === 'mm/dd/yyyy' ||
+            parsed.dateFormat === 'yyyy-mm-dd'
             ? parsed.dateFormat
             : defaults.dateFormat,
         landingPage:
           parsed.landingPage === '/dashboard' ||
-          parsed.landingPage === '/records' ||
-          parsed.landingPage === '/imports' ||
-          parsed.landingPage === '/email' ||
-          parsed.landingPage === '/account'
+            parsed.landingPage === '/records' ||
+            parsed.landingPage === '/imports' ||
+            parsed.landingPage === '/email' ||
+            parsed.landingPage === '/account'
             ? parsed.landingPage
             : defaults.landingPage,
       };
@@ -679,9 +681,9 @@ export function AccountPage() {
   const profileDirty = profileName.trim() !== (settings?.profile.full_name ?? '').trim();
   const workspaceDirty = Boolean(
     workspaceDefaults &&
-      (workspaceName.trim() !== workspaceDefaults.name.trim() ||
-        workspaceSlug.trim() !== workspaceDefaults.slug.trim() ||
-        workspaceCrmType !== workspaceDefaults.crmType),
+    (workspaceName.trim() !== workspaceDefaults.name.trim() ||
+      workspaceSlug.trim() !== workspaceDefaults.slug.trim() ||
+      workspaceCrmType !== workspaceDefaults.crmType),
   );
   const preferencesDirty = !arePreferencesEqual(preferences, savedPreferences);
 
@@ -937,6 +939,7 @@ export function AccountPage() {
         badge: <StatusBadge label="Active" tone="indigo" />,
         icon: Mail,
         tone: 'from-indigo-500/12 to-cyan-400/8',
+        gradientClass: 'bg-gradient-to-br from-indigo-500 to-cyan-500', // Add this
       },
       {
         label: 'Email verification',
@@ -950,6 +953,7 @@ export function AccountPage() {
         ),
         icon: ShieldCheck,
         tone: 'from-emerald-500/12 to-teal-400/8',
+        gradientClass: 'bg-gradient-to-br from-emerald-500 to-teal-500', // Add this
       },
       {
         label: 'Workspace role',
@@ -958,6 +962,7 @@ export function AccountPage() {
         badge: <StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />,
         icon: UserRound,
         tone: 'from-violet-500/12 to-indigo-400/8',
+        gradientClass: 'bg-gradient-to-br from-violet-500 to-indigo-500', // Add this
       },
       {
         label: 'Last sign in',
@@ -966,6 +971,7 @@ export function AccountPage() {
         badge: <StatusBadge label="Recent" tone="indigo" />,
         icon: Clock3,
         tone: 'from-cyan-500/12 to-blue-400/8',
+        gradientClass: 'bg-gradient-to-br from-cyan-500 to-blue-500', // Add this
       },
       {
         label: 'Session expires',
@@ -974,6 +980,7 @@ export function AccountPage() {
         badge: <StatusBadge label="Active session" tone="indigo" />,
         icon: Lock,
         tone: 'from-rose-500/10 to-indigo-400/8',
+        gradientClass: 'bg-gradient-to-br from-rose-500 to-orange-500', // Add this
       },
     ];
 
@@ -995,9 +1002,12 @@ export function AccountPage() {
                 <div className="relative flex items-start justify-between gap-3">
                   <div className="flex gap-3">
                     <motion.div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-indigo-700 shadow-sm"
-                      animate={{ scale: [1, 1.05, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: index * 0.15 }}
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg",
+                        row.gradientClass || "bg-gradient-to-br from-indigo-500 to-cyan-500"
+                      )}
+                      animate={{ scale: [1, 1.08, 1], rotate: [0, 5, -5, 0] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: index * 0.2 }}
                     >
                       <Icon className="h-5 w-5" />
                     </motion.div>
