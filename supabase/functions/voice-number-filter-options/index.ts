@@ -4,8 +4,11 @@ import {
   listFallbackStateOptions,
 } from '../_shared/voice-number-geography-fallback.ts';
 import { authenticateRequest, ensureWorkspaceOwner } from '../_shared/server.ts';
-import { getVoiceNumberCountryOptions, isAllowedVoiceNumberCountryCode } from '../_shared/voice-number-country-options.ts';
-import { listAvailablePhoneNumberFilterOptions } from '../_shared/telnyx-numbers.ts';
+import { isAllowedVoiceNumberCountryCode, resolveVoiceNumberCountryName } from '../_shared/voice-number-country-options.ts';
+import {
+  listAvailablePhoneNumberFilterOptions,
+  listAvailableVoiceCountryOptions,
+} from '../_shared/telnyx-numbers.ts';
 
 interface StateLikeOption {
   code: string;
@@ -132,7 +135,6 @@ Deno.serve(async (request) => {
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
     const requestedCountryCode = typeof payload.country_code === 'string' ? payload.country_code.trim().toUpperCase() : 'US';
-    const countryCode = isAllowedVoiceNumberCountryCode(requestedCountryCode) ? requestedCountryCode : 'US';
     const administrativeArea = typeof payload.administrative_area === 'string' ? payload.administrative_area.trim() : '';
     const locality = typeof payload.locality === 'string' ? payload.locality.trim() : '';
 
@@ -141,6 +143,32 @@ Deno.serve(async (request) => {
     }
 
     await ensureWorkspaceOwner(authContext.serviceClient, workspaceId, authContext.user.id);
+
+    let countries = [] as Array<{ code: string; name: string }>;
+
+    try {
+      countries = await listAvailableVoiceCountryOptions();
+    } catch (error) {
+      console.warn('[voice-number-filter-options] Telnyx country coverage fetch failed; falling back to requested country only.', {
+        requestedCountryCode,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    const fallbackCountryCode = isAllowedVoiceNumberCountryCode(requestedCountryCode) ? requestedCountryCode : 'US';
+    const fallbackCountry = {
+      code: fallbackCountryCode,
+      name: resolveVoiceNumberCountryName(fallbackCountryCode),
+    };
+    const availableCountryCodes = new Set(countries.map((country) => country.code));
+    const selectedCountry = countries.find((country) => country.code === requestedCountryCode)
+      ?? countries[0]
+      ?? fallbackCountry;
+    const countryCode = selectedCountry.code;
+
+    if (!availableCountryCodes.has(fallbackCountry.code) && countries.length === 0) {
+      countries = [fallbackCountry];
+    }
 
     let countryLevelOptions = {
       states: [] as StateLikeOption[],
@@ -165,7 +193,7 @@ Deno.serve(async (request) => {
     const fallbackStates = listFallbackStateOptions(countryCode);
     const fallbackCities = listFallbackCityOptions(countryCode, administrativeArea || null);
     return jsonResponse({
-      countries: getVoiceNumberCountryOptions(),
+      countries,
       states: mergeStateOptions(fallbackStates, countryLevelOptions.states),
       cities: mergeCityOptions(fallbackCities, countryLevelOptions.cities),
       area_codes: mergeAreaCodeOptions(countryLevelOptions.areaCodes),

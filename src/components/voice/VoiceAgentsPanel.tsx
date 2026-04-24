@@ -64,6 +64,7 @@ export function VoiceAgentsPanel({
   const [listError, setListError] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [submittingAgent, setSubmittingAgent] = useState(false);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [savingMappings, setSavingMappings] = useState(false);
   const [savingBindingNumberId, setSavingBindingNumberId] = useState<string | null>(null);
   const [deletingAgent, setDeletingAgent] = useState(false);
@@ -233,6 +234,38 @@ export function VoiceAgentsPanel({
       toast.error(message);
     } finally {
       setSubmittingAgent(false);
+    }
+  }
+
+  async function handleToggleAgentStatus() {
+    if (!detail || statusActionLoading) {
+      return;
+    }
+
+    const nextStatus = detail.agent.status === 'active' ? 'disabled' : 'active';
+    const actionLabel = nextStatus === 'active' ? 'activate' : 'disable';
+
+    setStatusActionLoading(true);
+    setAgentErrorMessage('');
+    setAgentActivationIssues([]);
+
+    try {
+      const response = await updateVoiceAgent(session, {
+        workspace_id: workspaceId,
+        voice_agent_id: detail.agent.id,
+        status: nextStatus,
+      });
+
+      setDetail((current) => (current ? { ...current, agent: response.agent } : current));
+      toast.success(nextStatus === 'active' ? 'Assistant activated.' : 'Assistant disabled.');
+      await loadAgents(response.agent.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Unable to ${actionLabel} assistant.`;
+      setAgentErrorMessage(message);
+      setAgentActivationIssues(error instanceof VoiceAgentServiceError ? error.activationIssues : []);
+      toast.error(message);
+    } finally {
+      setStatusActionLoading(false);
     }
   }
 
@@ -488,12 +521,44 @@ export function VoiceAgentsPanel({
                     {detail.agent.telnyx_sync_error}
                   </div>
                 ) : null}
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {detail.agent.status === 'active'
+                    ? 'This assistant is live and can be used for future inbound call handling.'
+                    : detail.agent.status === 'disabled'
+                      ? 'This assistant is turned off. Activate it here when you are ready to use it again.'
+                      : 'This assistant is still a draft. Activate it here when the setup is ready for live use.'}
+                </div>
+                {agentErrorMessage ? (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <div>{agentErrorMessage}</div>
+                    {agentActivationIssues.length > 0 ? (
+                      <ul className="mt-2 list-disc pl-5">
+                        {agentActivationIssues.map((issue) => (
+                          <li key={issue}>{issue}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-700">
                   {detail.agent.status}
                 </div>
+                <Button
+                  type="button"
+                  onClick={handleToggleAgentStatus}
+                  loading={statusActionLoading}
+                  className={
+                    detail.agent.status === 'active'
+                      ? 'border border-amber-300/50 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900'
+                      : undefined
+                  }
+                  variant={detail.agent.status === 'active' ? 'ghost' : 'primary'}
+                >
+                  {detail.agent.status === 'active' ? 'Disable assistant' : 'Activate assistant'}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"

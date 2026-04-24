@@ -83,6 +83,9 @@ export function VoiceNumberSearchCard({
         setCityOptions(data.cities);
         setAreaCodeOptions(data.area_codes);
 
+        const availableCountries = data.countries.length > 0 ? data.countries : DEFAULT_COUNTRY_OPTIONS;
+        const selectedCountryCode = (filters.country_code ?? 'US').trim().toUpperCase();
+        const hasSelectedCountry = availableCountries.some((country) => country.code === selectedCountryCode);
         const hasSelectedState = !normalizedState || data.states.some((state) => state.code === normalizedState);
         const hasSelectedCity =
           !normalizedLocality ||
@@ -95,6 +98,14 @@ export function VoiceNumberSearchCard({
           data.area_codes.some((areaCode) => areaCode.code === normalizedAreaCode);
 
         const patch: Partial<Omit<VoiceNumberSearchFilters, 'workspace_id'>> = {};
+        const nextCountryCode = hasSelectedCountry ? selectedCountryCode : availableCountries[0]?.code ?? 'US';
+
+        if (nextCountryCode !== selectedCountryCode) {
+          patch.country_code = nextCountryCode;
+          patch.administrative_area = '';
+          patch.locality = '';
+          patch.npa = '';
+        }
 
         if (!hasSelectedState && normalizedState) {
           patch.administrative_area = '';
@@ -213,6 +224,7 @@ export function VoiceNumberSearchCard({
     const start = (currentPage - 1) * SEARCH_RESULTS_PAGE_SIZE;
     return results.slice(start, start + SEARCH_RESULTS_PAGE_SIZE);
   }, [currentPage, results]);
+  const showEmptyResultsState = hasSearched && !loading && results.length === 0;
 
   function renderFilterFields() {
     return (
@@ -392,7 +404,7 @@ export function VoiceNumberSearchCard({
           </div>
         </div>
 
-        {hasSearched ? (
+        {hasSearched && !loading ? (
           results.length > 0 ? (
             <div className="space-y-5" data-guide-id="voice-number-results">
               <div className="space-y-3 md:hidden">
@@ -541,11 +553,11 @@ export function VoiceNumberSearchCard({
                 </>
               ) : null}
             </div>
-          ) : (
+          ) : showEmptyResultsState ? (
             <div className="rounded-[28px] border border-slate-300 bg-white px-5 py-4 text-sm text-slate-600" data-guide-id="voice-number-results">
-              No numbers matched the current filters. Try a different country, region, or number type.
+              No available numbers matched your search. Try another country, region, city, or number type.
             </div>
-          )
+          ) : null
         ) : null}
       </div>
 

@@ -22,7 +22,7 @@ const COUNTRY_CODES = [
   'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW',
 ] as const;
 
-function resolveCountryName(code: string) {
+export function resolveVoiceNumberCountryName(code: string) {
   try {
     const formatter = new Intl.DisplayNames(['en'], { type: 'region' });
     return formatter.of(code) ?? code;
@@ -35,7 +35,7 @@ export function getVoiceNumberCountryOptions(): VoiceNumberCountryOption[] {
   return [...COUNTRY_CODES]
     .map((code) => ({
       code,
-      name: resolveCountryName(code),
+      name: resolveVoiceNumberCountryName(code),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }

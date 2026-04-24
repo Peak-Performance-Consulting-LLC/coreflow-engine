@@ -4,6 +4,10 @@ import {
   TelnyxNetworkError,
   TelnyxTimeoutError,
 } from './telnyx-client.ts';
+import {
+  resolveVoiceNumberCountryName,
+  type VoiceNumberCountryOption,
+} from './voice-number-country-options.ts';
 
 export interface TelnyxNumbersClientConfig {
   apiKey?: string;
@@ -57,6 +61,11 @@ export interface TelnyxPhoneNumberFilterOptions {
   states: TelnyxPhoneNumberFilterStateOption[];
   cities: TelnyxPhoneNumberFilterCityOption[];
   areaCodes: TelnyxPhoneNumberFilterAreaCodeOption[];
+}
+
+export interface TelnyxCountryCoverageOption extends VoiceNumberCountryOption {
+  inventoryCoverage: boolean;
+  phoneNumberTypes: string[];
 }
 
 export interface PurchaseManagedPhoneNumberParams extends TelnyxNumbersClientConfig {
@@ -876,6 +885,56 @@ export async function listAvailablePhoneNumberFilterOptions(
       return cityCompare !== 0 ? cityCompare : left.code.localeCompare(right.code);
     }),
   } satisfies TelnyxPhoneNumberFilterOptions;
+}
+
+export async function listAvailableVoiceCountryOptions(
+  params: TelnyxNumbersClientConfig = {},
+): Promise<TelnyxCountryCoverageOption[]> {
+  const response = await telnyxRequest(params, 'GET', '/country_coverage');
+  const data = asRecord(asRecord(response)?.data);
+
+  if (!data) {
+    return [];
+  }
+
+  const options: TelnyxCountryCoverageOption[] = [];
+
+  for (const [rawName, rawValue] of Object.entries(data)) {
+    const entry = asRecord(rawValue);
+
+    if (!entry) {
+      continue;
+    }
+
+    const code = getString(entry.code).toUpperCase();
+
+    if (!/^[A-Z]{2}$/.test(code)) {
+      continue;
+    }
+
+    const hasNumbers = entry.numbers === true;
+    const features = asArray(entry.features)
+      .map((feature) => getString(feature).toLowerCase())
+      .filter(Boolean);
+    const hasVoice = features.includes('voice');
+
+    if (!hasNumbers || !hasVoice) {
+      continue;
+    }
+
+    const phoneNumberTypes = asArray(entry.phone_number_type)
+      .map((type) => getString(type).toLowerCase())
+      .filter(Boolean);
+
+    options.push({
+      code,
+      name: getString(rawName) || resolveVoiceNumberCountryName(code),
+      inventoryCoverage: entry.inventory_coverage === true,
+      phoneNumberTypes,
+    });
+  }
+
+  return options.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export async function findAvailablePhoneNumber(
