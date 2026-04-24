@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useEffect } from 'react';
 import type { RecordSource } from '../../lib/crm-types';
 import type { VoiceAgentRecord, VoiceAgentTelnyxOptions } from '../../lib/voice-agent-service';
+import type { AssistantPromptInput, GeneratedAssistantContent } from '../../types/voice-assistant-ai';
 import { Button } from '../ui/Button';
 import {
   VoiceAgentForm,
@@ -23,6 +24,13 @@ interface VoiceAgentFormDrawerProps {
   onValuesChange: (values: VoiceAgentFormValues) => void;
   onClose: () => void;
   onSubmit: (values: VoiceAgentFormValues) => Promise<void> | void;
+  aiGeneration?: {
+    onOpen: () => void;
+    lastGenerated?: GeneratedAssistantContent | null;
+    buttonLabel?: string;
+    initialInput?: AssistantPromptInput | null;
+    contextNotice?: string;
+  };
 }
 
 export function VoiceAgentFormDrawer({
@@ -40,6 +48,7 @@ export function VoiceAgentFormDrawer({
   onValuesChange,
   onClose,
   onSubmit,
+  aiGeneration,
 }: VoiceAgentFormDrawerProps) {
   useEffect(() => {
     if (!isOpen) {
@@ -122,6 +131,7 @@ export function VoiceAgentFormDrawer({
             values={values}
             onValuesChange={onValuesChange}
             onSubmit={onSubmit}
+            aiGeneration={aiGeneration}
           />
         </div>
 

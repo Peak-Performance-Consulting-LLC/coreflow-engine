@@ -61,15 +61,24 @@ export interface VoiceNumberFilterCityOption {
   stateName: string;
 }
 
+export interface VoiceNumberFilterAreaCodeOption {
+  code: string;
+  stateCode: string;
+  stateName: string;
+  city: string | null;
+}
+
 export interface VoiceNumberFilterOptionsResponse {
   countries: VoiceNumberFilterCountryOption[];
   states: VoiceNumberFilterStateOption[];
   cities: VoiceNumberFilterCityOption[];
+  area_codes: VoiceNumberFilterAreaCodeOption[];
 }
 
 export interface VoiceNumberPurchaseInput {
   workspace_id: string;
   phone_number: string;
+  country_code?: string;
   label?: string;
   voice_mode?: VoiceMode;
 }
@@ -182,7 +191,7 @@ export async function searchVoiceNumbers(session: Session, filters: VoiceNumberS
 
 export async function getVoiceNumberFilterOptions(
   session: Session,
-  payload: Pick<VoiceNumberSearchFilters, 'workspace_id' | 'country_code'>,
+  payload: Pick<VoiceNumberSearchFilters, 'workspace_id' | 'country_code' | 'administrative_area' | 'locality'>,
 ) {
   return invoke<VoiceNumberFilterOptionsResponse>('voice-number-filter-options', session, payload);
 }

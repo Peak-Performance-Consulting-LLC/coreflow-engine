@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCrmWorkspace } from '../../hooks/useCrmWorkspace';
+import { deriveAssistantPromptInputFromAgent } from '../../lib/voice-assistant-ai-service';
+import type { CRMType } from '../../lib/types';
 import type {
   VoiceAgentBindingRecord,
   VoiceAgentMappingInput,
@@ -20,19 +22,23 @@ import {
   VoiceAgentServiceError,
   updateVoiceAgent,
 } from '../../lib/voice-agent-service';
+import { formatCrmLabel } from '../../lib/utils';
 import type { VoiceNumberRecord } from '../../lib/voice-service';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { SectionSkeleton } from '../ui/SectionSkeleton';
+import { AssistantAIGeneratorModal } from './AssistantAIGeneratorModal';
 import { type VoiceAgentFormValues, createEmptyVoiceAgentFormValues } from './VoiceAgentForm';
 import { VoiceAgentBindingsEditor } from './VoiceAgentBindingsEditor';
 import { VoiceAgentFieldMappingEditor } from './VoiceAgentFieldMappingEditor';
 import { VoiceAgentFormDrawer } from './VoiceAgentFormDrawer';
 import type { Session } from '@supabase/supabase-js';
+import type { GeneratedAssistantContent } from '../../types/voice-assistant-ai';
 
 interface VoiceAgentsPanelProps {
   session: Session;
   workspaceId: string;
+  workspaceCrmType: CRMType;
   numbers: VoiceNumberRecord[];
   numbersLoading: boolean;
   numbersError: string;
@@ -41,6 +47,7 @@ interface VoiceAgentsPanelProps {
 export function VoiceAgentsPanel({
   session,
   workspaceId,
+  workspaceCrmType,
   numbers,
   numbersLoading,
   numbersError,
@@ -57,6 +64,7 @@ export function VoiceAgentsPanel({
   const [listError, setListError] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [submittingAgent, setSubmittingAgent] = useState(false);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [savingMappings, setSavingMappings] = useState(false);
   const [savingBindingNumberId, setSavingBindingNumberId] = useState<string | null>(null);
   const [deletingAgent, setDeletingAgent] = useState(false);
@@ -67,6 +75,8 @@ export function VoiceAgentsPanel({
   const [telnyxOptionsError, setTelnyxOptionsError] = useState('');
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [editDraftValues, setEditDraftValues] = useState<VoiceAgentFormValues>(createEmptyVoiceAgentFormValues);
+  const [isEditAiGeneratorOpen, setIsEditAiGeneratorOpen] = useState(false);
+  const [lastEditGeneratedContent, setLastEditGeneratedContent] = useState<GeneratedAssistantContent | null>(null);
 
   const readyNumbers = useMemo(
     () =>
@@ -213,6 +223,8 @@ export function VoiceAgentsPanel({
         source_id: response.agent.source_id ?? '',
         status: response.agent.status,
       });
+      setLastEditGeneratedContent(null);
+      setIsEditAiGeneratorOpen(false);
       setIsEditDrawerOpen(false);
       await loadAgents(response.agent.id);
     } catch (error) {
@@ -222,6 +234,38 @@ export function VoiceAgentsPanel({
       toast.error(message);
     } finally {
       setSubmittingAgent(false);
+    }
+  }
+
+  async function handleToggleAgentStatus() {
+    if (!detail || statusActionLoading) {
+      return;
+    }
+
+    const nextStatus = detail.agent.status === 'active' ? 'disabled' : 'active';
+    const actionLabel = nextStatus === 'active' ? 'activate' : 'disable';
+
+    setStatusActionLoading(true);
+    setAgentErrorMessage('');
+    setAgentActivationIssues([]);
+
+    try {
+      const response = await updateVoiceAgent(session, {
+        workspace_id: workspaceId,
+        voice_agent_id: detail.agent.id,
+        status: nextStatus,
+      });
+
+      setDetail((current) => (current ? { ...current, agent: response.agent } : current));
+      toast.success(nextStatus === 'active' ? 'Assistant activated.' : 'Assistant disabled.');
+      await loadAgents(response.agent.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Unable to ${actionLabel} assistant.`;
+      setAgentErrorMessage(message);
+      setAgentActivationIssues(error instanceof VoiceAgentServiceError ? error.activationIssues : []);
+      toast.error(message);
+    } finally {
+      setStatusActionLoading(false);
     }
   }
 
@@ -245,6 +289,8 @@ export function VoiceAgentsPanel({
       source_id: detail.agent.source_id ?? '',
       status: detail.agent.status,
     });
+    setLastEditGeneratedContent(null);
+    setIsEditAiGeneratorOpen(false);
     setIsEditDrawerOpen(true);
   }
 
@@ -255,8 +301,33 @@ export function VoiceAgentsPanel({
 
     setAgentErrorMessage('');
     setAgentActivationIssues([]);
+    setIsEditAiGeneratorOpen(false);
     setIsEditDrawerOpen(false);
   }
+
+  function handleApplyEditGeneratedContent(content: GeneratedAssistantContent) {
+    setEditDraftValues((current) => ({
+      ...current,
+      name: content.suggestedName,
+      description: content.description,
+      greeting: content.greeting,
+      system_prompt: content.systemPrompt,
+    }));
+    setLastEditGeneratedContent(content);
+    toast.success(
+      content.usedFallback
+        ? 'A basic AI improvement draft was applied. Please review it before saving.'
+        : 'AI improvements applied. Review the draft and save when ready.',
+    );
+  }
+
+  const editAiInitialInput = useMemo(
+    () =>
+      detail?.agent
+        ? deriveAssistantPromptInputFromAgent(detail.agent, formatCrmLabel(workspaceCrmType))
+        : null,
+    [detail?.agent, workspaceCrmType],
+  );
 
   async function handleSaveMappings(mappings: VoiceAgentMappingInput[]) {
     if (!detail) {
@@ -450,12 +521,44 @@ export function VoiceAgentsPanel({
                     {detail.agent.telnyx_sync_error}
                   </div>
                 ) : null}
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {detail.agent.status === 'active'
+                    ? 'This assistant is live and can be used for future inbound call handling.'
+                    : detail.agent.status === 'disabled'
+                      ? 'This assistant is turned off. Activate it here when you are ready to use it again.'
+                      : 'This assistant is still a draft. Activate it here when the setup is ready for live use.'}
+                </div>
+                {agentErrorMessage ? (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <div>{agentErrorMessage}</div>
+                    {agentActivationIssues.length > 0 ? (
+                      <ul className="mt-2 list-disc pl-5">
+                        {agentActivationIssues.map((issue) => (
+                          <li key={issue}>{issue}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-700">
                   {detail.agent.status}
                 </div>
+                <Button
+                  type="button"
+                  onClick={handleToggleAgentStatus}
+                  loading={statusActionLoading}
+                  className={
+                    detail.agent.status === 'active'
+                      ? 'border border-amber-300/50 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900'
+                      : undefined
+                  }
+                  variant={detail.agent.status === 'active' ? 'ghost' : 'primary'}
+                >
+                  {detail.agent.status === 'active' ? 'Disable assistant' : 'Activate assistant'}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -514,7 +617,32 @@ export function VoiceAgentsPanel({
         onValuesChange={setEditDraftValues}
         onClose={handleCloseEditDrawer}
         onSubmit={handleUpdateAgent}
+        aiGeneration={{
+          onOpen: () => setIsEditAiGeneratorOpen(true),
+          lastGenerated: lastEditGeneratedContent,
+          buttonLabel: 'Improve with AI',
+          initialInput: editAiInitialInput,
+          contextNotice: detail?.agent?.status === 'active'
+            ? 'This assistant is active. Any changes you save here will affect future calls.'
+            : undefined,
+        }}
       />
+
+      {detail?.agent ? (
+        <AssistantAIGeneratorModal
+          isOpen={isEditAiGeneratorOpen}
+          mode="edit"
+          session={session}
+          workspaceId={workspaceId}
+          suggestedBusinessType={formatCrmLabel(workspaceCrmType)}
+          initialInput={editAiInitialInput}
+          contextNotice={detail.agent.status === 'active'
+            ? 'This assistant is active. Any changes you save here will affect future calls.'
+            : undefined}
+          onClose={() => setIsEditAiGeneratorOpen(false)}
+          onApply={handleApplyEditGeneratedContent}
+        />
+      ) : null}
     </div>
   );
 }

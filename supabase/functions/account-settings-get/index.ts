@@ -27,18 +27,15 @@ Deno.serve(async (request) => {
       return authContext;
     }
 
-    // ── Resolve workspace_id: accept from body OR auto-resolve from membership ──
+    // Resolve workspace_id: prefer the explicit request payload and only
+    // auto-resolve from membership when no workspace_id was sent.
     let workspaceId = '';
 
-    // Only parse body if content-type is JSON and there is a body
-    const contentType = request.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      try {
-        const payload = (await request.json()) as Record<string, unknown>;
-        workspaceId = normalizeString(payload.workspace_id);
-      } catch {
-        // body may be empty – fall through to auto-resolve
-      }
+    try {
+      const payload = (await request.json()) as Record<string, unknown>;
+      workspaceId = normalizeString(payload.workspace_id);
+    } catch {
+      // Body may be empty. Fall through to auto-resolve below.
     }
 
     // Auto-resolve from workspace_members if not provided in body

@@ -4,6 +4,10 @@ import {
   TelnyxNetworkError,
   TelnyxTimeoutError,
 } from './telnyx-client.ts';
+import {
+  resolveVoiceNumberCountryName,
+  type VoiceNumberCountryOption,
+} from './voice-number-country-options.ts';
 
 export interface TelnyxNumbersClientConfig {
   apiKey?: string;
@@ -46,9 +50,22 @@ export interface TelnyxPhoneNumberFilterCityOption {
   stateName: string;
 }
 
+export interface TelnyxPhoneNumberFilterAreaCodeOption {
+  code: string;
+  stateCode: string;
+  stateName: string;
+  city: string | null;
+}
+
 export interface TelnyxPhoneNumberFilterOptions {
   states: TelnyxPhoneNumberFilterStateOption[];
   cities: TelnyxPhoneNumberFilterCityOption[];
+  areaCodes: TelnyxPhoneNumberFilterAreaCodeOption[];
+}
+
+export interface TelnyxCountryCoverageOption extends VoiceNumberCountryOption {
+  inventoryCoverage: boolean;
+  phoneNumberTypes: string[];
 }
 
 export interface PurchaseManagedPhoneNumberParams extends TelnyxNumbersClientConfig {
@@ -158,6 +175,20 @@ function getString(value: unknown) {
 function getNullableString(value: unknown) {
   const next = getString(value);
   return next.length > 0 ? next : null;
+}
+
+function normalizeCountryCode(value: unknown, fieldName: string) {
+  const countryCode = getNullableString(value)?.toUpperCase() ?? null;
+
+  if (!countryCode) {
+    throw new Error(`${fieldName} is required and must be a valid 2-letter ISO country code.`);
+  }
+
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    throw new Error(`${fieldName} must be a valid 2-letter ISO country code.`);
+  }
+
+  return countryCode;
 }
 
 function normalizeStatus(value: unknown) {
@@ -341,7 +372,44 @@ function extractAdministrativeArea(raw: Record<string, unknown>) {
   return getNullableString(raw.administrative_area) ??
     getNullableString(asRecord(raw.region_information)?.administrative_area) ??
     getNullableString(asRecord(raw.region_information)?.region_name) ??
-    getNullableString(getRegionName(raw, 'state'));
+    getNullableString(getRegionName(raw, 'state')) ??
+    getNullableString(getRegionName(raw, 'province')) ??
+    getNullableString(getRegionName(raw, 'region')) ??
+    getNullableString(getRegionName(raw, 'district'));
+}
+
+function normalizeAdministrativeAreaFilter(value: string | null) {
+  return getString(value).toUpperCase();
+}
+
+function normalizeLocalityFilter(value: string | null) {
+  return getString(value).toLowerCase();
+}
+
+function normalizeLooseLocationToken(value: string | null) {
+  return getString(value)
+    .toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isLooseLocationMatch(resultValue: string | null, requestedValue: string | null) {
+  const normalizedResult = normalizeLooseLocationToken(resultValue);
+  const normalizedRequested = normalizeLooseLocationToken(requestedValue);
+
+  if (!normalizedRequested) {
+    return true;
+  }
+
+  if (!normalizedResult) {
+    return false;
+  }
+
+  return normalizedResult === normalizedRequested ||
+    normalizedResult.includes(normalizedRequested) ||
+    normalizedRequested.includes(normalizedResult);
 }
 
 function extractLocality(raw: Record<string, unknown>) {
@@ -350,6 +418,12 @@ function extractLocality(raw: Record<string, unknown>) {
     getNullableString(asRecord(raw.region_information)?.locality) ??
     getNullableString(asRecord(raw.region_information)?.city) ??
     getNullableString(getRegionName(raw, 'rate_center'));
+}
+
+function extractNationalDestinationCode(raw: Record<string, unknown>) {
+  return getNullableString(raw.national_destination_code) ??
+    getNullableString(raw.ndc) ??
+    getNullableString(getRegionName(raw, 'national_destination_code'));
 }
 
 function normalizeSearchResult(rawValue: unknown): TelnyxAvailablePhoneNumber | null {
@@ -388,6 +462,151 @@ function normalizeSearchResult(rawValue: unknown): TelnyxAvailablePhoneNumber | 
     monthlyCost: normalizeMonthlyCost(costInfo),
     upfrontCost: normalizeUpfrontCost(costInfo),
   };
+}
+
+function buildAvailablePhoneNumbersQuery(input: {
+  countryCode: string;
+  locality?: string | null;
+  administrativeArea?: string | null;
+  npa?: string | null;
+  phoneNumberType?: string | null;
+  limit: number;
+}) {
+  return {
+    'filter[country_code]': input.countryCode,
+    ...(input.locality ? { 'filter[locality]': input.locality } : {}),
+    ...(input.administrativeArea ? { 'filter[administrative_area]': input.administrativeArea } : {}),
+    ...(input.npa ? { 'filter[national_destination_code]': input.npa } : {}),
+    ...(input.phoneNumberType ? { 'filter[phone_number_type]': input.phoneNumberType } : {}),
+    'filter[features]': 'voice',
+    'filter[limit]': input.limit,
+  };
+}
+
+async function fetchAvailablePhoneNumberRows(
+  params: SearchAvailablePhoneNumbersParams,
+  query: Record<string, string | number>,
+) {
+  const response = await telnyxRequest(params, 'GET', '/available_phone_numbers', {
+    query,
+  });
+
+  return asArray(asRecord(response)?.data)
+    .map((rawItem) => asRecord(rawItem))
+    .filter((raw): raw is Record<string, unknown> => Boolean(raw));
+}
+
+function normalizeAvailablePhoneNumberRows(
+  rows: Record<string, unknown>[],
+  countryCode: string,
+) {
+  return rows
+    .map((raw) => ({
+      raw,
+      normalized: normalizeSearchResult(raw),
+    }))
+    .filter((item): item is { raw: Record<string, unknown>; normalized: TelnyxAvailablePhoneNumber } => Boolean(item.normalized))
+    .filter((item) => doesResultCountryMatch(countryCode, item.normalized.countryCode));
+}
+
+function matchesRequestedSearchFilters(
+  row: { raw: Record<string, unknown>; normalized: TelnyxAvailablePhoneNumber },
+  filters: {
+    locality?: string | null;
+    administrativeArea?: string | null;
+    npa?: string | null;
+    allowLooseLocationMatch?: boolean;
+  },
+) {
+  const requestedLocality = normalizeLocalityFilter(filters.locality ?? null);
+  const requestedAdministrativeArea = normalizeAdministrativeAreaFilter(filters.administrativeArea ?? null);
+  const requestedNpa = getString(filters.npa);
+  const allowLooseLocationMatch = Boolean(filters.allowLooseLocationMatch);
+
+  if (requestedAdministrativeArea) {
+    const resultAdministrativeArea = normalizeAdministrativeAreaFilter(row.normalized.administrativeArea);
+
+    const stateMatches = allowLooseLocationMatch
+      ? isLooseLocationMatch(resultAdministrativeArea, requestedAdministrativeArea)
+      : resultAdministrativeArea === requestedAdministrativeArea;
+
+    if (!stateMatches) {
+      return false;
+    }
+  }
+
+  if (requestedLocality) {
+    const resultLocality = normalizeLocalityFilter(row.normalized.locality);
+
+    const localityMatches = allowLooseLocationMatch
+      ? isLooseLocationMatch(resultLocality, requestedLocality)
+      : resultLocality === requestedLocality;
+
+    if (!localityMatches) {
+      return false;
+    }
+  }
+
+  if (requestedNpa) {
+    const resultNpa = getString(extractNationalDestinationCode(row.raw));
+
+    if (resultNpa !== requestedNpa) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function dedupeSearchResults(rows: { raw: Record<string, unknown>; normalized: TelnyxAvailablePhoneNumber }[]) {
+  const deduped = new Map<string, { raw: Record<string, unknown>; normalized: TelnyxAvailablePhoneNumber }>();
+
+  for (const row of rows) {
+    if (!deduped.has(row.normalized.phoneNumber)) {
+      deduped.set(row.normalized.phoneNumber, row);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
+function buildFallbackSearchResults(
+  rows: { raw: Record<string, unknown>; normalized: TelnyxAvailablePhoneNumber }[],
+  filters: {
+    locality?: string | null;
+    administrativeArea?: string | null;
+    npa?: string | null;
+  },
+  limit: number,
+) {
+  const candidateGroups = [
+    rows.filter((row) => matchesRequestedSearchFilters(row, { ...filters })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, { ...filters, allowLooseLocationMatch: true })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, {
+      administrativeArea: filters.administrativeArea,
+      npa: filters.npa,
+      allowLooseLocationMatch: true,
+    })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, {
+      locality: filters.locality,
+      npa: filters.npa,
+      allowLooseLocationMatch: true,
+    })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, {
+      administrativeArea: filters.administrativeArea,
+      allowLooseLocationMatch: true,
+    })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, {
+      locality: filters.locality,
+      allowLooseLocationMatch: true,
+    })),
+    rows.filter((row) => matchesRequestedSearchFilters(row, {
+      npa: filters.npa,
+    })),
+    rows,
+  ];
+
+  return dedupeSearchResults(candidateGroups.flat()).slice(0, limit).map((item) => item.normalized);
 }
 
 function normalizeOrder(rawValue: unknown): TelnyxManagedNumberOrder | null {
@@ -491,80 +710,131 @@ export async function searchAvailableUsPhoneNumbers(params: SearchAvailableUsPho
 
 export async function searchAvailablePhoneNumbers(params: SearchAvailablePhoneNumbersParams) {
   const limit = Number.isFinite(params.limit) ? Math.min(Math.max(1, Number(params.limit)), 20) : 10;
-  const countryCode = getNullableString(params.countryCode)?.toUpperCase() ?? null;
+  const countryCode = normalizeCountryCode(params.countryCode, 'country_code');
   const locality = getNullableString(params.locality);
   const administrativeArea = getNullableString(params.administrativeArea);
   const npa = getNullableString(params.npa);
   const phoneNumberType = getNullableString(params.phoneNumberType);
-
-  if (!countryCode) {
-    throw new Error('country_code is required and must be a valid 2-letter ISO country code.');
-  }
-
-  if (!/^[A-Z]{2}$/.test(countryCode)) {
-    throw new Error('country_code must be a valid 2-letter ISO country code.');
-  }
 
   if (npa && !/^[0-9]{1,6}$/.test(npa)) {
     throw new Error('npa must be a numeric national destination code with 1 to 6 digits.');
   }
 
   const normalizedPhoneNumberType = phoneNumberType === 'toll_free' ? 'toll-free' : phoneNumberType;
+  const requestedFilters = {
+    countryCode,
+    locality,
+    administrativeArea,
+    npa,
+    phoneNumberType: normalizedPhoneNumberType,
+    limit,
+  };
 
-  const response = await telnyxRequest(params, 'GET', '/available_phone_numbers', {
-    query: {
-      'filter[country_code]': countryCode,
-      ...(locality ? { 'filter[locality]': locality } : {}),
-      ...(administrativeArea ? { 'filter[administrative_area]': administrativeArea } : {}),
-      ...(npa ? { 'filter[national_destination_code]': npa } : {}),
-      ...(normalizedPhoneNumberType ? { 'filter[phone_number_type]': normalizedPhoneNumberType } : {}),
-      'filter[features]': 'voice',
-      'filter[limit]': limit,
-    },
-  });
+  try {
+    const rows = await fetchAvailablePhoneNumberRows(
+      params,
+      buildAvailablePhoneNumbersQuery(requestedFilters),
+    );
+    const normalizedRows = normalizeAvailablePhoneNumberRows(rows, countryCode);
+    const exactResults = normalizedRows.map((item) => item.normalized);
 
-  return asArray(asRecord(response)?.data)
-    .map(normalizeSearchResult)
-    .filter((item): item is TelnyxAvailablePhoneNumber => Boolean(item))
-    .filter((item) => doesResultCountryMatch(countryCode, item.countryCode));
+    if (exactResults.length > 0 || (!locality && !administrativeArea && !npa)) {
+      return exactResults;
+    }
+
+    return buildFallbackSearchResults(
+      normalizedRows,
+      {
+        locality,
+        administrativeArea,
+        npa,
+      },
+      limit,
+    );
+  } catch (error) {
+    const shouldFallback =
+      error instanceof TelnyxApiError &&
+      error.status === 400 &&
+      Boolean(locality || administrativeArea || npa);
+
+    if (!shouldFallback) {
+      throw error;
+    }
+
+    console.warn('[telnyx-numbers] search fallback triggered after Telnyx rejected scoped filters', {
+      countryCode,
+      locality,
+      administrativeArea,
+      npa,
+      phoneNumberType: normalizedPhoneNumberType,
+      message: error.message,
+    });
+
+    const fallbackLimit = Math.min(Math.max(limit * 10, 100), 250);
+    const fallbackRows = await fetchAvailablePhoneNumberRows(
+      params,
+      buildAvailablePhoneNumbersQuery({
+        countryCode,
+        phoneNumberType: normalizedPhoneNumberType,
+        limit: fallbackLimit,
+      }),
+    );
+
+    return buildFallbackSearchResults(
+      normalizeAvailablePhoneNumberRows(fallbackRows, countryCode),
+      {
+        locality,
+        administrativeArea,
+        npa,
+      },
+      limit,
+    );
+  }
 }
 
 export async function listAvailablePhoneNumberFilterOptions(
   params: SearchAvailablePhoneNumbersParams & { sampleSize?: number | null },
 ) {
-  const countryCode = getNullableString(params.countryCode)?.toUpperCase() ?? null;
-
-  if (!countryCode) {
-    throw new Error('country_code is required and must be a valid 2-letter ISO country code.');
-  }
-
-  if (!/^[A-Z]{2}$/.test(countryCode)) {
-    throw new Error('country_code must be a valid 2-letter ISO country code.');
-  }
+  const countryCode = normalizeCountryCode(params.countryCode, 'country_code');
+  const administrativeArea = getNullableString(params.administrativeArea);
+  const locality = getNullableString(params.locality);
 
   const sampleSize = Number.isFinite(params.sampleSize)
-    ? Math.min(Math.max(20, Number(params.sampleSize)), 250)
-    : 250;
+    ? Math.min(Math.max(50, Number(params.sampleSize)), 1000)
+    : 1000;
 
   const response = await telnyxRequest(params, 'GET', '/available_phone_numbers', {
     query: {
       'filter[country_code]': countryCode,
+      ...(administrativeArea ? { 'filter[administrative_area]': administrativeArea } : {}),
+      ...(locality ? { 'filter[locality]': locality } : {}),
       'filter[features]': 'voice',
       'filter[limit]': sampleSize,
     },
   });
 
-  const numbers = asArray(asRecord(response)?.data)
-    .map(normalizeSearchResult)
-    .filter((item): item is TelnyxAvailablePhoneNumber => Boolean(item));
   const stateMap = new Map<string, TelnyxPhoneNumberFilterStateOption>();
   const cityMap = new Map<string, TelnyxPhoneNumberFilterCityOption>();
+  const areaCodeMap = new Map<string, TelnyxPhoneNumberFilterAreaCodeOption>();
 
-  for (const number of numbers) {
-    const rawState = getString(number.administrativeArea).toUpperCase();
-    const rawCity = getString(number.locality);
+  for (const rawItem of asArray(asRecord(response)?.data)) {
+    const raw = asRecord(rawItem);
+
+    if (!raw) {
+      continue;
+    }
+
+    const normalized = normalizeSearchResult(raw);
+
+    if (!normalized || !doesResultCountryMatch(countryCode, normalized.countryCode)) {
+      continue;
+    }
+
+    const rawState = getString(normalized.administrativeArea).toUpperCase();
+    const rawCity = getString(normalized.locality);
     const stateCode = rawState || 'N/A';
     const stateName = stateCode;
+    const areaCode = extractNationalDestinationCode(raw);
 
     if (!stateMap.has(stateCode)) {
       stateMap.set(stateCode, {
@@ -584,6 +854,19 @@ export async function listAvailablePhoneNumberFilterOptions(
         });
       }
     }
+
+    if (areaCode) {
+      const areaCodeKey = `${areaCode}::${stateCode}::${rawCity.toLowerCase()}`;
+
+      if (!areaCodeMap.has(areaCodeKey)) {
+        areaCodeMap.set(areaCodeKey, {
+          code: areaCode,
+          stateCode,
+          stateName,
+          city: rawCity || null,
+        });
+      }
+    }
   }
 
   return {
@@ -592,14 +875,76 @@ export async function listAvailablePhoneNumberFilterOptions(
       const stateCompare = left.stateCode.localeCompare(right.stateCode);
       return stateCompare !== 0 ? stateCompare : left.city.localeCompare(right.city);
     }),
+    areaCodes: [...areaCodeMap.values()].sort((left, right) => {
+      const stateCompare = left.stateCode.localeCompare(right.stateCode);
+      if (stateCompare !== 0) {
+        return stateCompare;
+      }
+
+      const cityCompare = (left.city ?? '').localeCompare(right.city ?? '');
+      return cityCompare !== 0 ? cityCompare : left.code.localeCompare(right.code);
+    }),
   } satisfies TelnyxPhoneNumberFilterOptions;
 }
 
-export async function findAvailableUsPhoneNumber(params: TelnyxNumbersClientConfig & { phoneNumber: string }) {
-  const phoneNumber = normalizePhase1UsPhoneNumber(params.phoneNumber, 'phone_number');
+export async function listAvailableVoiceCountryOptions(
+  params: TelnyxNumbersClientConfig = {},
+): Promise<TelnyxCountryCoverageOption[]> {
+  const response = await telnyxRequest(params, 'GET', '/country_coverage');
+  const data = asRecord(asRecord(response)?.data);
+
+  if (!data) {
+    return [];
+  }
+
+  const options: TelnyxCountryCoverageOption[] = [];
+
+  for (const [rawName, rawValue] of Object.entries(data)) {
+    const entry = asRecord(rawValue);
+
+    if (!entry) {
+      continue;
+    }
+
+    const code = getString(entry.code).toUpperCase();
+
+    if (!/^[A-Z]{2}$/.test(code)) {
+      continue;
+    }
+
+    const hasNumbers = entry.numbers === true;
+    const features = asArray(entry.features)
+      .map((feature) => getString(feature).toLowerCase())
+      .filter(Boolean);
+    const hasVoice = features.includes('voice');
+
+    if (!hasNumbers || !hasVoice) {
+      continue;
+    }
+
+    const phoneNumberTypes = asArray(entry.phone_number_type)
+      .map((type) => getString(type).toLowerCase())
+      .filter(Boolean);
+
+    options.push({
+      code,
+      name: getString(rawName) || resolveVoiceNumberCountryName(code),
+      inventoryCoverage: entry.inventory_coverage === true,
+      phoneNumberTypes,
+    });
+  }
+
+  return options.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function findAvailablePhoneNumber(
+  params: TelnyxNumbersClientConfig & { phoneNumber: string; countryCode: string },
+) {
+  const phoneNumber = normalizeE164Number(params.phoneNumber, 'phone_number');
+  const countryCode = normalizeCountryCode(params.countryCode, 'country_code');
   const response = await telnyxRequest(params, 'GET', '/available_phone_numbers', {
     query: {
-      'filter[country_code]': 'US',
+      'filter[country_code]': countryCode,
       'filter[phone_number]': phoneNumber,
       'filter[features]': 'voice',
       'filter[limit]': 1,
@@ -765,7 +1110,7 @@ async function updateOwnedPhoneNumberConnection(
 export async function reconcileManagedPhoneNumber(
   params: PurchaseManagedPhoneNumberParams & { orderId?: string | null },
 ): Promise<TelnyxProvisionedPhoneNumber> {
-  const phoneNumber = normalizePhase1UsPhoneNumber(params.phoneNumber, 'phone_number');
+  const phoneNumber = normalizeE164Number(params.phoneNumber, 'phone_number');
   const connectionId = getNullableString(params.connectionId);
   const customerReference = getNullableString(params.customerReference);
   const orderId = getNullableString(params.orderId);
@@ -806,7 +1151,7 @@ export async function reconcileManagedPhoneNumber(
 }
 
 export async function purchaseManagedPhoneNumber(params: PurchaseManagedPhoneNumberParams): Promise<TelnyxProvisionedPhoneNumber> {
-  const phoneNumber = normalizePhase1UsPhoneNumber(params.phoneNumber, 'phone_number');
+  const phoneNumber = normalizeE164Number(params.phoneNumber, 'phone_number');
   const connectionId = getNullableString(params.connectionId);
   const customerReference = getNullableString(params.customerReference);
 

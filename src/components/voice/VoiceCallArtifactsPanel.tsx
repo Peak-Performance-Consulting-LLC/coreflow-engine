@@ -50,6 +50,10 @@ function renderArtifactBody(artifact: VoiceOpsArtifactRecord) {
     return artifact.error_text ?? 'Artifact generation failed.';
   }
 
+  if (artifact.status === 'processing') {
+    return 'Generating artifact...';
+  }
+
   return 'Artifact not generated yet.';
 }
 

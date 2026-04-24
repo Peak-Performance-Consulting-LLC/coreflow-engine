@@ -30,7 +30,7 @@ export type VoiceActionType =
   | 'schedule_callback';
 export type VoiceActionRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
 export type VoiceArtifactType = 'summary' | 'disposition' | 'follow_up_recommendation' | 'transcript';
-export type VoiceArtifactStatus = 'pending' | 'ready' | 'failed';
+export type VoiceArtifactStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
 export interface WorkspacePhoneNumberRow {
   id: string;

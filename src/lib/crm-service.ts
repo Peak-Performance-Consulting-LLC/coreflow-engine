@@ -3,6 +3,7 @@ import { getSupabaseClient } from './supabaseClient';
 import type {
   CrmWorkspaceConfig,
   ImportJobInput,
+  ImportJobResult,
   RecordDetailResponse,
   RecordListPageResult,
   RecordListQuery,
@@ -351,18 +352,11 @@ export async function createRecordTask(
 }
 
 export async function createImportJob(session: Session, payload: ImportJobInput) {
-  return invoke<{
-    job: {
-      id: string;
-      file_name: string;
-      status: string;
-      total_rows: number | null;
-      success_rows: number | null;
-      failed_rows: number | null;
-      created_at: string;
-      updated_at: string;
-    };
-    importExecutionImplemented: boolean;
-    message: string;
-  }>('import-job-create', session, payload);
+  const response = await invoke<ImportJobResult>('import-job-create', session, payload);
+
+  if (response.importedCount > 0) {
+    invalidateWorkspaceRecordLists(payload.workspace_id);
+  }
+
+  return response;
 }

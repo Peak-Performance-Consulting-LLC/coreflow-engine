@@ -1,9 +1,10 @@
 import type { Session } from '@supabase/supabase-js';
 import { MapPin, Search, SlidersHorizontal, Star, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import {
+  type VoiceNumberFilterAreaCodeOption,
   getVoiceNumberFilterOptions,
   type VoiceNumberFilterCityOption,
   type VoiceNumberFilterCountryOption,
@@ -45,11 +46,13 @@ export function VoiceNumberSearchCard({
   const [countryOptions, setCountryOptions] = useState<VoiceNumberFilterCountryOption[]>(DEFAULT_COUNTRY_OPTIONS);
   const [stateOptions, setStateOptions] = useState<VoiceNumberFilterStateOption[]>([]);
   const [cityOptions, setCityOptions] = useState<VoiceNumberFilterCityOption[]>([]);
+  const [areaCodeOptions, setAreaCodeOptions] = useState<VoiceNumberFilterAreaCodeOption[]>([]);
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [detailResult, setDetailResult] = useState<VoiceNumberSearchResult | null>(null);
   const onFilterChangeRef = useRef(onFilterChange);
+  const areaCodeListId = useId();
 
   useEffect(() => {
     onFilterChangeRef.current = onFilterChange;
@@ -57,6 +60,7 @@ export function VoiceNumberSearchCard({
 
   const normalizedState = (filters.administrative_area ?? '').trim().toUpperCase();
   const normalizedLocality = (filters.locality ?? '').trim().toLowerCase();
+  const normalizedAreaCode = (filters.npa ?? '').trim();
 
   useEffect(() => {
     let active = true;
@@ -66,6 +70,8 @@ export function VoiceNumberSearchCard({
     void getVoiceNumberFilterOptions(session, {
       workspace_id: workspaceId,
       country_code: filters.country_code || 'US',
+      administrative_area: filters.administrative_area || undefined,
+      locality: filters.locality || undefined,
     })
       .then((data) => {
         if (!active) {
@@ -75,7 +81,11 @@ export function VoiceNumberSearchCard({
         setCountryOptions(data.countries.length > 0 ? data.countries : DEFAULT_COUNTRY_OPTIONS);
         setStateOptions(data.states);
         setCityOptions(data.cities);
+        setAreaCodeOptions(data.area_codes);
 
+        const availableCountries = data.countries.length > 0 ? data.countries : DEFAULT_COUNTRY_OPTIONS;
+        const selectedCountryCode = (filters.country_code ?? 'US').trim().toUpperCase();
+        const hasSelectedCountry = availableCountries.some((country) => country.code === selectedCountryCode);
         const hasSelectedState = !normalizedState || data.states.some((state) => state.code === normalizedState);
         const hasSelectedCity =
           !normalizedLocality ||
@@ -83,8 +93,19 @@ export function VoiceNumberSearchCard({
             const stateMatches = normalizedState ? city.stateCode === normalizedState : true;
             return stateMatches && city.city.toLowerCase() === normalizedLocality;
           });
+        const hasSelectedAreaCode =
+          !normalizedAreaCode ||
+          data.area_codes.some((areaCode) => areaCode.code === normalizedAreaCode);
 
         const patch: Partial<Omit<VoiceNumberSearchFilters, 'workspace_id'>> = {};
+        const nextCountryCode = hasSelectedCountry ? selectedCountryCode : availableCountries[0]?.code ?? 'US';
+
+        if (nextCountryCode !== selectedCountryCode) {
+          patch.country_code = nextCountryCode;
+          patch.administrative_area = '';
+          patch.locality = '';
+          patch.npa = '';
+        }
 
         if (!hasSelectedState && normalizedState) {
           patch.administrative_area = '';
@@ -92,6 +113,10 @@ export function VoiceNumberSearchCard({
 
         if (!hasSelectedCity && normalizedLocality) {
           patch.locality = '';
+        }
+
+        if (!hasSelectedAreaCode && (filters.npa ?? '').trim()) {
+          patch.npa = '';
         }
 
         if (Object.keys(patch).length > 0) {
@@ -105,6 +130,7 @@ export function VoiceNumberSearchCard({
 
         setStateOptions([]);
         setCityOptions([]);
+        setAreaCodeOptions([]);
       })
       .finally(() => {
         if (active) {
@@ -115,7 +141,7 @@ export function VoiceNumberSearchCard({
     return () => {
       active = false;
     };
-  }, [filters.country_code, session, workspaceId, normalizedLocality, normalizedState]);
+  }, [filters.country_code, normalizedAreaCode, session, workspaceId, normalizedLocality, normalizedState]);
 
   const filteredCityOptions = useMemo(() => {
     if (!normalizedState) {
@@ -133,6 +159,28 @@ export function VoiceNumberSearchCard({
     const selected = filteredCityOptions.find((city) => city.city.toLowerCase() === normalizedLocality);
     return selected ? `${selected.city}::${selected.stateCode}` : '';
   }, [filteredCityOptions, normalizedLocality]);
+
+  const filteredAreaCodeOptions = useMemo(() => {
+    const cityScoped = areaCodeOptions.filter((areaCode) => {
+      const stateMatches = normalizedState ? areaCode.stateCode === normalizedState : true;
+      const cityMatches = normalizedLocality ? (areaCode.city ?? '').toLowerCase() === normalizedLocality : true;
+      return stateMatches && cityMatches;
+    });
+
+    if (cityScoped.length > 0) {
+      return cityScoped;
+    }
+
+    const stateScoped = areaCodeOptions.filter((areaCode) => (
+      normalizedState ? areaCode.stateCode === normalizedState : true
+    ));
+
+    if (stateScoped.length > 0) {
+      return stateScoped;
+    }
+
+    return areaCodeOptions;
+  }, [areaCodeOptions, normalizedLocality, normalizedState]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -176,6 +224,7 @@ export function VoiceNumberSearchCard({
     const start = (currentPage - 1) * SEARCH_RESULTS_PAGE_SIZE;
     return results.slice(start, start + SEARCH_RESULTS_PAGE_SIZE);
   }, [currentPage, results]);
+  const showEmptyResultsState = hasSearched && !loading && results.length === 0;
 
   function renderFilterFields() {
     return (
@@ -183,6 +232,7 @@ export function VoiceNumberSearchCard({
         <label className="flex flex-col gap-2 text-sm text-slate-700">
           <span className="font-medium">Country</span>
           <select
+            data-guide-id="voice-number-country"
             value={filters.country_code ?? 'US'}
             onChange={(event) =>
               onFilterChange({
@@ -205,6 +255,7 @@ export function VoiceNumberSearchCard({
         <label className="flex flex-col gap-2 text-sm text-slate-700">
           <span className="font-medium">State / Region</span>
           <select
+            data-guide-id="voice-number-state"
             value={filters.administrative_area ?? ''}
             onChange={(event) => {
               const nextState = event.target.value;
@@ -216,6 +267,7 @@ export function VoiceNumberSearchCard({
               onFilterChange({
                 administrative_area: nextState,
                 locality: cityStillValid ? filters.locality : '',
+                npa: '',
               });
             }}
             disabled={filterOptionsLoading}
@@ -233,6 +285,7 @@ export function VoiceNumberSearchCard({
         <label className="flex flex-col gap-2 text-sm text-slate-700">
           <span className="font-medium">City</span>
           <select
+            data-guide-id="voice-number-city"
             value={selectedCityValue}
             onChange={(event) => {
               const value = event.target.value;
@@ -246,6 +299,7 @@ export function VoiceNumberSearchCard({
               onFilterChange({
                 locality: city,
                 administrative_area: stateCode || filters.administrative_area,
+                npa: '',
               });
             }}
             disabled={filterOptionsLoading}
@@ -263,13 +317,32 @@ export function VoiceNumberSearchCard({
         <label className="flex flex-col gap-2 text-sm text-slate-700">
           <span className="font-medium">Area code / NDC</span>
           <input
+            data-guide-id="voice-number-area"
             value={filters.npa ?? ''}
             onChange={(event) => onFilterChange({ npa: event.target.value.replace(/\D/g, '').slice(0, 6) })}
-            placeholder="312 or 20"
+            list={filteredAreaCodeOptions.length > 0 ? areaCodeListId : undefined}
+            placeholder={filteredAreaCodeOptions.length > 0 ? 'Select or type area code' : 'Type area code or NDC'}
             autoComplete="off"
             inputMode="numeric"
-            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-500"
+            disabled={filterOptionsLoading}
+            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-500 disabled:bg-slate-100"
           />
+          {filteredAreaCodeOptions.length > 0 ? (
+            <datalist id={areaCodeListId}>
+              {filteredAreaCodeOptions.map((areaCode) => (
+                <option
+                  key={`${areaCode.code}-${areaCode.stateCode}-${areaCode.city ?? 'any'}`}
+                  value={areaCode.code}
+                  label={areaCode.city ? `${areaCode.code} - ${areaCode.city}` : areaCode.code}
+                />
+              ))}
+            </datalist>
+          ) : null}
+          <span className="text-xs text-slate-500">
+            {filteredAreaCodeOptions.length > 0
+              ? 'Suggestions are based on available provider inventory for the selected region.'
+              : 'No provider area-code list is available for this selection yet. You can still type the NDC manually.'}
+          </span>
         </label>
 
         <label className="flex flex-col gap-2 text-sm text-slate-700">
@@ -318,16 +391,22 @@ export function VoiceNumberSearchCard({
         <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-6">
           {renderFilterFields()}
           <div className="flex items-end xl:justify-end">
-            <Button type="button" onClick={() => void onSearch()} loading={loading} className="w-full xl:w-auto">
+            <Button
+              type="button"
+              onClick={() => void onSearch()}
+              loading={loading}
+              className="w-full xl:w-auto"
+              data-guide-id="voice-number-search"
+            >
               <Search className="h-4 w-4" />
               Search Numbers
             </Button>
           </div>
         </div>
 
-        {hasSearched ? (
+        {hasSearched && !loading ? (
           results.length > 0 ? (
-            <div className="space-y-5">
+            <div className="space-y-5" data-guide-id="voice-number-results">
               <div className="space-y-3 md:hidden">
                 {paginatedResults.map((result) => (
                   <div key={result.phoneNumber} className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
@@ -474,11 +553,11 @@ export function VoiceNumberSearchCard({
                 </>
               ) : null}
             </div>
-          ) : (
-            <div className="rounded-[28px] border border-slate-300 bg-white px-5 py-4 text-sm text-slate-600">
-              No numbers matched the current filters. Try a different country, region, or number type.
+          ) : showEmptyResultsState ? (
+            <div className="rounded-[28px] border border-slate-300 bg-white px-5 py-4 text-sm text-slate-600" data-guide-id="voice-number-results">
+              No available numbers matched your search. Try another country, region, city, or number type.
             </div>
-          )
+          ) : null
         ) : null}
       </div>
 

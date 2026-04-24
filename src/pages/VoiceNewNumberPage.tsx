@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { VoiceNumberPurchaseDrawer } from '../components/voice/VoiceNumberPurchaseDrawer';
 import { VoiceNumberSearchCard } from '../components/voice/VoiceNumberSearchCard';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import type { VoiceNumberSearchResult } from '../lib/voice-service';
 import { purchaseVoiceNumber, searchVoiceNumbers } from '../lib/voice-service';
 
@@ -27,6 +29,50 @@ export function VoiceNewNumberPage() {
   });
 
   const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'voice-new-number',
+      title: 'Provision a managed voice number',
+      summary:
+        'This page searches provider inventory and lets the workspace owner provision a number without exposing raw Telnyx setup to the rest of the team.',
+      nextStep:
+        hasSearched && searchResults.length > 0
+          ? 'Review the matching numbers and buy the one that fits the region and routing needs.'
+          : 'Choose the country and region filters first, then search the available inventory.',
+      highlights: ['Country-aware search', 'Managed provisioning', 'Workspace-safe setup'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'voice-number-country',
+          title: 'Choose the country first',
+          body: 'Country selection controls the available downstream state, city, and area-code options for the provider search.',
+          targetId: 'voice-number-country',
+        },
+        {
+          id: 'voice-number-region',
+          title: 'Narrow the region filters',
+          body: 'Use state, city, and area code together when you need a local number, or keep them broad if you only care about availability.',
+          targetId: 'voice-number-state',
+        },
+        {
+          id: 'voice-number-search',
+          title: 'Search the inventory',
+          body: 'This action queries the managed provider inventory and returns the current numbers that can be purchased for the workspace.',
+          targetId: 'voice-number-search',
+        },
+        {
+          id: 'voice-number-results',
+          title: 'Review the available results',
+          body: 'Use the results list to compare location, number type, pricing, and features before buying a number into the workspace.',
+          targetId: 'voice-number-results',
+          placement: 'top',
+        },
+      ],
+    }),
+    [hasSearched, searchResults.length],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -79,6 +125,7 @@ export function VoiceNewNumberPage() {
       const response = await purchaseVoiceNumber(session, {
         workspace_id: workspace.id,
         phone_number: selectedResult.phoneNumber,
+        country_code: selectedResult.countryCode ?? filters.country_code ?? undefined,
         label: label || undefined,
       });
       toast.success(response.webhookReady ? 'Voice number provisioned.' : 'Voice number saved as pending.');

@@ -2,6 +2,7 @@ import type { EdgeClient } from './server.ts';
 import {
   listVoiceCallArtifactsByVoiceCallId,
   saveVoiceCallArtifact,
+  type VoiceCallArtifactRow,
   type VoiceCallRow,
 } from './voice-repository.ts';
 
@@ -18,12 +19,14 @@ interface VoiceCallSummaryResult {
 }
 
 const DEFAULT_SUMMARY_MODEL = 'gemini-1.5-flash';
-const DEFAULT_MAX_TRANSCRIPT_CHARS = 12000;
+const DEFAULT_MAX_TRANSCRIPT_CHARS = 6000;
 const MIN_TRANSCRIPT_MESSAGE_COUNT = 3;
 const MIN_TRANSCRIPT_CHARS = 80;
-const DEFAULT_RETRY_MAX_RETRIES = 2;
-const DEFAULT_RETRY_BASE_DELAY_MS = 700;
-const DEFAULT_RETRY_MAX_DELAY_MS = 5000;
+const DEFAULT_RETRY_MAX_RETRIES = 1;
+const DEFAULT_RETRY_BASE_DELAY_MS = 3000;
+const DEFAULT_RETRY_MAX_DELAY_MS = 15000;
+const DEFAULT_THROTTLE_MS = 2000;
+const SUMMARY_ARTIFACT_TYPES = ['summary', 'disposition', 'follow_up_recommendation'] as const;
 
 function nowIso() {
   return new Date().toISOString();
@@ -57,6 +60,30 @@ function parseNonNegativeInt(value: string | undefined, fallback: number) {
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function truncateForLog(value: string, maxLength = 2000) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function toLoggableBody(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return truncateForLog(value);
+  }
+
+  try {
+    return truncateForLog(JSON.stringify(value));
+  } catch {
+    return '[unserializable response body]';
+  }
 }
 
 function sleep(ms: number) {
@@ -138,7 +165,18 @@ async function requestGeminiSummaryWithRetry(params: {
       }
 
       const status = response.status;
+      const responseBodyForLog = toLoggableBody(responseBody);
       const canRetry = isRetryableSummaryStatus(status) && attempt + 1 < maxAttempts;
+
+      console.warn('[voice-call-summary] Gemini summary request returned non-OK status', {
+        workspaceId: params.workspaceId,
+        voiceCallId: params.voiceCallId,
+        model: params.model,
+        status,
+        attempt: attempt + 1,
+        maxAttempts,
+        responseBody: responseBodyForLog,
+      });
 
       if (!canRetry) {
         throw new Error(`AI summary request failed with status ${status}.`);
@@ -160,6 +198,8 @@ async function requestGeminiSummaryWithRetry(params: {
         attempt: attempt + 1,
         maxAttempts,
         delayMs,
+        retryAfterMs,
+        responseBody: responseBodyForLog,
       });
 
       attempt += 1;
@@ -195,6 +235,82 @@ async function requestGeminiSummaryWithRetry(params: {
   }
 
   throw new Error('AI summary request failed after retry attempts.');
+}
+
+function isRelevantSummaryArtifact(artifact: VoiceCallArtifactRow) {
+  return SUMMARY_ARTIFACT_TYPES.includes(artifact.artifact_type as (typeof SUMMARY_ARTIFACT_TYPES)[number]);
+}
+
+async function listRelevantSummaryArtifacts(params: {
+  db: EdgeClient;
+  workspaceId: string;
+  voiceCallId: string;
+}) {
+  const existing = await listVoiceCallArtifactsByVoiceCallId(params.db, params.workspaceId, params.voiceCallId);
+  return existing.filter((artifact) => isRelevantSummaryArtifact(artifact));
+}
+
+async function shouldSkipGeneration(params: {
+  db: EdgeClient;
+  workspaceId: string;
+  voiceCallId: string;
+}) {
+  const relevant = await listRelevantSummaryArtifacts(params);
+
+  if (relevant.length === 0) {
+    return { skip: false, reason: 'no_artifacts' as const };
+  }
+
+  if (relevant.some((artifact) => artifact.status === 'processing' || artifact.status === 'ready')) {
+    return { skip: true, reason: 'already_processing_or_ready' as const };
+  }
+
+  if (relevant.length === SUMMARY_ARTIFACT_TYPES.length && relevant.every((artifact) => artifact.status === 'failed')) {
+    return { skip: false, reason: 'retry_failed_artifacts' as const };
+  }
+
+  if (relevant.every((artifact) => artifact.status === 'pending')) {
+    return { skip: false, reason: 'pending_placeholders' as const };
+  }
+
+  return { skip: true, reason: 'mixed_artifact_state' as const };
+}
+
+async function reserveProcessingArtifacts(params: {
+  db: EdgeClient;
+  workspaceId: string;
+  voiceCallId: string;
+}) {
+  const generatedAt = nowIso();
+
+  for (const artifactType of SUMMARY_ARTIFACT_TYPES) {
+    await saveVoiceCallArtifact(params.db, {
+      workspaceId: params.workspaceId,
+      voiceCallId: params.voiceCallId,
+      artifactType,
+      status: 'processing',
+      source: 'ai_summary_v1',
+      contentText: null,
+      contentJson: {},
+      model: null,
+      errorText: null,
+      generatedAt,
+    });
+  }
+
+  const relevant = await listRelevantSummaryArtifacts(params);
+  const claimed = relevant.length === SUMMARY_ARTIFACT_TYPES.length &&
+    relevant.every((artifact) =>
+      artifact.status === 'processing' &&
+      artifact.generated_at === generatedAt &&
+      artifact.source === 'ai_summary_v1'
+    );
+
+  return {
+    claimed,
+    generatedAt,
+    relevant,
+  };
 }
 
 function toTranscriptMessages(messageHistory: unknown): TranscriptMessage[] {
@@ -365,25 +481,6 @@ async function saveSummaryArtifacts(params: {
   });
 }
 
-async function shouldSkipGeneration(params: {
-  db: EdgeClient;
-  workspaceId: string;
-  voiceCallId: string;
-}) {
-  const existing = await listVoiceCallArtifactsByVoiceCallId(params.db, params.workspaceId, params.voiceCallId);
-  const relevant = existing.filter((artifact) =>
-    artifact.artifact_type === 'summary' ||
-    artifact.artifact_type === 'disposition' ||
-    artifact.artifact_type === 'follow_up_recommendation'
-  );
-
-  if (relevant.length < 3) {
-    return false;
-  }
-
-  return relevant.every((artifact) => artifact.status === 'ready' || artifact.status === 'failed');
-}
-
 export async function generateVoiceCallSummaryArtifacts(params: {
   db: EdgeClient;
   workspaceId: string;
@@ -396,7 +493,14 @@ export async function generateVoiceCallSummaryArtifacts(params: {
     return;
   }
 
-  if (await shouldSkipGeneration({ db: params.db, workspaceId, voiceCallId })) {
+  const skipCheck = await shouldSkipGeneration({ db: params.db, workspaceId, voiceCallId });
+
+  if (skipCheck.skip) {
+    console.log('[voice-call-summary] skipped summary generation', {
+      workspaceId,
+      voiceCallId,
+      reason: skipCheck.reason,
+    });
     return;
   }
 
@@ -442,6 +546,31 @@ export async function generateVoiceCallSummaryArtifacts(params: {
     Deno.env.get('VOICE_CALL_SUMMARY_RETRY_MAX_DELAY_MS'),
     DEFAULT_RETRY_MAX_DELAY_MS,
   );
+  const throttleMs = parseNonNegativeInt(
+    Deno.env.get('VOICE_CALL_SUMMARY_THROTTLE_MS'),
+    DEFAULT_THROTTLE_MS,
+  );
+
+  const reservation = await reserveProcessingArtifacts({
+    db: params.db,
+    workspaceId,
+    voiceCallId,
+  });
+
+  if (!reservation.claimed) {
+    console.log('[voice-call-summary] skipped Gemini request after concurrent reservation', {
+      workspaceId,
+      voiceCallId,
+      claimGeneratedAt: reservation.generatedAt,
+      artifactStates: reservation.relevant.map((artifact) => ({
+        artifactType: artifact.artifact_type,
+        status: artifact.status,
+        generatedAt: artifact.generated_at,
+      })),
+    });
+    return;
+  }
+
   const summaryPrompt = [
     'Summarize this inbound call transcript for CRM operators.',
     'Use only the provided conversation.',
@@ -473,6 +602,16 @@ export async function generateVoiceCallSummaryArtifacts(params: {
   };
 
   try {
+    if (throttleMs > 0) {
+      console.log('[voice-call-summary] throttling before Gemini summary request', {
+        workspaceId,
+        voiceCallId,
+        model,
+        throttleMs,
+      });
+      await sleep(throttleMs);
+    }
+
     const endpoint = `${baseUrl.replace(/\/+$/, '')}/models/${encodeURIComponent(model)}:generateContent?key=${
       encodeURIComponent(geminiApiKey)
     }`;
@@ -508,6 +647,7 @@ export async function generateVoiceCallSummaryArtifacts(params: {
         baseDelayMs,
         maxDelayMs,
       },
+      throttleMs,
     });
   } catch (error) {
     const errorText = error instanceof Error ? error.message : 'Unknown summary generation error.';
@@ -526,6 +666,7 @@ export async function generateVoiceCallSummaryArtifacts(params: {
       message: errorText,
       transcriptMessageCount: messages.length,
       transcriptChars: transcript.length,
+      throttleMs,
     });
   }
 }

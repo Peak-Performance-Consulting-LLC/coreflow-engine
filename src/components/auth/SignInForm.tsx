@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageGuide } from '../../hooks/useAppGuide';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';
@@ -30,6 +31,37 @@ export function SignInForm() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const projectRef = getConfiguredSupabaseProjectRef();
+
+  usePageGuide({
+    key: 'auth-signin',
+    title: 'Sign in to your workspace',
+    summary:
+      'Use this page to access an existing CoreFlow workspace. After sign in, CoreFlow restores your workspace and routes you into the correct CRM experience.',
+    nextStep: 'Enter your workspace email and password, then continue into CoreFlow.',
+    highlights: ['Workspace-aware sign in', 'Remember me support', 'Fast dashboard routing'],
+    autoStart: 'once',
+    steps: [
+      {
+        id: 'signin-email',
+        title: 'Start with the account email',
+        body: 'Use the email already linked to your workspace so CoreFlow can restore the correct membership and routing.',
+        targetId: 'sign-in-email',
+      },
+      {
+        id: 'signin-password',
+        title: 'Enter the current password',
+        body: 'This signs you into Supabase Auth and unlocks the shared CRM workspace attached to this account.',
+        targetId: 'sign-in-password',
+      },
+      {
+        id: 'signin-submit',
+        title: 'Enter the workspace',
+        body: 'When you submit, CoreFlow refreshes your workspace access and sends you into the matching dashboard automatically.',
+        targetId: 'sign-in-submit',
+        placement: 'top',
+      },
+    ],
+  });
 
   useEffect(() => {
     const stateEmail = routeState?.prefillEmail;
@@ -126,6 +158,7 @@ export function SignInForm() {
         <Input
           label="Email"
           type="email"
+          data-guide-id="sign-in-email"
           placeholder="you@company.com"
           autoComplete="email"
           value={email}
@@ -135,6 +168,7 @@ export function SignInForm() {
         <Input
           label="Password"
           type={showPassword ? 'text' : 'password'}
+          data-guide-id="sign-in-password"
           placeholder="Enter your password"
           autoComplete="current-password"
           value={password}

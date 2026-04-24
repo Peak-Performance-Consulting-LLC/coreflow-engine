@@ -27,6 +27,7 @@ export function DashboardShell({ workspace, onSignOut }: DashboardShellProps) {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
+          data-guide-id="dashboard-hero"
           className="grid gap-4 xl:grid-cols-[1fr_300px]"
         >
           {/* Hero card */}
@@ -45,12 +46,13 @@ export function DashboardShell({ workspace, onSignOut }: DashboardShellProps) {
 
               {/* CTA buttons */}
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link to="/records" className={buttonStyles('primary', 'sm')}>
+                <Link to="/records" className={buttonStyles('primary', 'sm')} data-guide-id="dashboard-open-records">
                   Open records
                 </Link>
                 <Link
                   to="/records"
                   state={{ openCreateRecord: true }}
+                  data-guide-id="dashboard-create-record"
                   className={buttonStyles('secondary', 'sm')}
                 >
                   Create record

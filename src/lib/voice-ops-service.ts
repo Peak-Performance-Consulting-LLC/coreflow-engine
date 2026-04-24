@@ -97,7 +97,7 @@ export interface VoiceOpsActionRunRecord {
 export interface VoiceOpsArtifactRecord {
   id: string;
   artifact_type: VoiceArtifactType;
-  status: 'pending' | 'ready' | 'failed';
+  status: 'pending' | 'processing' | 'ready' | 'failed';
   source: string | null;
   content_text: string | null;
   content_json: Record<string, unknown>;

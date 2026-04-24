@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, PhoneCall, RefreshCcw, Waves } from 'lucide-react';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { VoiceCallDetailDrawer } from '../components/voice/VoiceCallDetailDrawer';
@@ -11,6 +12,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import {
   createVoiceTaskFromRecommendation,
   getVoiceCallDetail,
@@ -58,6 +60,44 @@ export function VoiceOpsPage() {
     () => (listData?.calls ?? []).filter((call) => call.outcome_status === 'lead_created').length,
     [listData],
   );
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'voice-ops',
+      title: 'Review the inbound call queue',
+      summary:
+        'This page is the shared operations queue for inbound calls. It helps the team filter the queue, inspect call details, resolve review items, and retry automation safely.',
+      nextStep:
+        openReviewCount > 0
+          ? 'Start with the open review items so unresolved call outcomes do not linger in the queue.'
+          : 'Use the filters to narrow the queue, then open the next call that needs review or a retry.',
+      highlights: ['Call review queue', 'Retry actions', 'Task creation from calls'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'voice-ops-refresh',
+          title: 'Refresh the live queue',
+          body: 'Use refresh when the team wants the latest call outcomes and review statuses before acting.',
+          targetId: 'voice-ops-refresh',
+        },
+        {
+          id: 'voice-ops-filters',
+          title: 'Filter the queue by what needs attention',
+          body: 'The filters let users isolate review-needed calls, assistant-specific traffic, or calls that still need a linked CRM record.',
+          targetId: 'voice-ops-filters',
+        },
+        {
+          id: 'voice-ops-table',
+          title: 'Open a call from the table',
+          body: 'Selecting a call opens the detail drawer where users can inspect artifacts, retry actions, resolve review status, and create follow-up tasks.',
+          targetId: 'voice-ops-table',
+          placement: 'top',
+        },
+      ],
+    }),
+    [openReviewCount],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -250,6 +290,7 @@ export function VoiceOpsPage() {
                 type="button"
                 variant="secondary"
                 size="sm"
+                data-guide-id="voice-ops-refresh"
                 onClick={() => void loadCalls({ nextSelectedCallId: selectedCallId })}
                 loading={listLoading}
               >
@@ -293,46 +334,50 @@ export function VoiceOpsPage() {
           </Card>
         </div>
 
-        <VoiceCallFilters
-          filters={filters}
-          calls={listData?.calls ?? []}
-          loading={listLoading}
-          onChange={(patch) => {
-            setPage(1);
-            setFilters((current) => ({ ...current, ...patch }));
-          }}
-          onReset={() => {
-            setPage(1);
-            setFilters(defaultFilters);
-          }}
-        />
+        <div data-guide-id="voice-ops-filters">
+          <VoiceCallFilters
+            filters={filters}
+            calls={listData?.calls ?? []}
+            loading={listLoading}
+            onChange={(patch) => {
+              setPage(1);
+              setFilters((current) => ({ ...current, ...patch }));
+            }}
+            onReset={() => {
+              setPage(1);
+              setFilters(defaultFilters);
+            }}
+          />
+        </div>
 
-        <VoiceCallsTable
-          calls={listData?.calls ?? []}
-          loading={listLoading}
-          selectedCallId={selectedCallId}
-          onSelect={setSelectedCallId}
-          page={listData?.page ?? page}
-          pageSize={listData?.pageSize ?? pageSize}
-          total={listData?.total ?? 0}
-          hasNextPage={Boolean(listData?.next_page)}
-          hasPrevPage={(listData?.page ?? page) > 1}
-          onPageChange={(nextPage) => {
-            if (nextPage < 1 || listLoading) {
-              return;
-            }
+        <div data-guide-id="voice-ops-table">
+          <VoiceCallsTable
+            calls={listData?.calls ?? []}
+            loading={listLoading}
+            selectedCallId={selectedCallId}
+            onSelect={setSelectedCallId}
+            page={listData?.page ?? page}
+            pageSize={listData?.pageSize ?? pageSize}
+            total={listData?.total ?? 0}
+            hasNextPage={Boolean(listData?.next_page)}
+            hasPrevPage={(listData?.page ?? page) > 1}
+            onPageChange={(nextPage) => {
+              if (nextPage < 1 || listLoading) {
+                return;
+              }
 
-            setPage(nextPage);
-          }}
-          onPageSizeChange={(nextPageSize) => {
-            if (listLoading) {
-              return;
-            }
+              setPage(nextPage);
+            }}
+            onPageSizeChange={(nextPageSize) => {
+              if (listLoading) {
+                return;
+              }
 
-            setPage(1);
-            setPageSize(nextPageSize);
-          }}
-        />
+              setPage(1);
+              setPageSize(nextPageSize);
+            }}
+          />
+        </div>
       </div>
 
       <VoiceCallDetailDrawer

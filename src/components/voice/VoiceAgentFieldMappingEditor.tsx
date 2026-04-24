@@ -7,6 +7,17 @@ import type {
   VoiceAgentSourceValueType,
 } from '../../lib/voice-agent-service';
 
+interface MappingEditorRow extends VoiceAgentMappingInput {
+  row_id: string;
+}
+
+let mappingEditorRowCounter = 0;
+
+function createMappingEditorRowId() {
+  mappingEditorRowCounter += 1;
+  return `mapping-row-${mappingEditorRowCounter}`;
+}
+
 const coreTargetOptions = [
   { value: 'title', label: 'Title' },
   { value: 'full_name', label: 'Full name' },
@@ -21,8 +32,9 @@ const sourceValueTypeOptions: Array<{ value: VoiceAgentSourceValueType; label: s
   { value: 'array', label: 'Array' },
 ];
 
-function createEmptyRow(position: number): VoiceAgentMappingInput {
+function createEmptyRow(position: number): MappingEditorRow {
   return {
+    row_id: createMappingEditorRowId(),
     source_key: '',
     source_label: '',
     source_description: '',
@@ -34,7 +46,7 @@ function createEmptyRow(position: number): VoiceAgentMappingInput {
   };
 }
 
-function toInputRows(mappings: VoiceAgentMappingRecord[]): VoiceAgentMappingInput[] {
+function toInputRows(mappings: VoiceAgentMappingRecord[]): MappingEditorRow[] {
   if (mappings.length === 0) {
     return [createEmptyRow(0)];
   }
@@ -42,6 +54,7 @@ function toInputRows(mappings: VoiceAgentMappingRecord[]): VoiceAgentMappingInpu
   const firstMapping = [...mappings].sort((a, b) => a.position - b.position)[0];
 
   return [{
+    row_id: createMappingEditorRowId(),
     source_key: firstMapping.source_key,
     source_label: firstMapping.source_label,
     source_description: firstMapping.source_description,
@@ -66,7 +79,7 @@ export function VoiceAgentFieldMappingEditor({
   saving,
   onSave,
 }: VoiceAgentFieldMappingEditorProps) {
-  const [rows, setRows] = useState<VoiceAgentMappingInput[]>(() => toInputRows(mappings));
+  const [rows, setRows] = useState<MappingEditorRow[]>(() => toInputRows(mappings));
 
   useEffect(() => {
     setRows(toInputRows(mappings));
@@ -94,7 +107,7 @@ export function VoiceAgentFieldMappingEditor({
 
       <div className="mt-6 space-y-4">
         {rows.map((row, index) => (
-          <div key={`${row.source_key}-${index}`} className="rounded-3xl border border-slate-300 bg-white p-5">
+          <div key={row.row_id} className="rounded-3xl border border-slate-300 bg-white p-5">
               <div className="grid gap-4 xl:grid-cols-2">
                 <label className="flex flex-col gap-2 text-sm text-slate-800">
                   <span className="font-semibold">Source key</span>
@@ -260,7 +273,7 @@ export function VoiceAgentFieldMappingEditor({
         <Button
           type="button"
           loading={saving}
-          onClick={() => void onSave(rows.map((row, index) => ({ ...row, position: index })))}
+          onClick={() => void onSave(rows.map(({ row_id: _rowId, ...row }, index) => ({ ...row, position: index })))}
         >
           Save mappings
         </Button>

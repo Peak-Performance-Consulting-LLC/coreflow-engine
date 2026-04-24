@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { RecordCreateDrawer } from '../components/records/RecordCreateDrawer';
@@ -12,6 +13,7 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import {
   addRecordNote,
@@ -130,6 +132,54 @@ export function RecordsPage() {
     [filters, config],
   );
   const hasActiveFilters = activeFilterChips.length > 0;
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'records-queue',
+      title: 'Work the shared record queue',
+      summary:
+        'This page is the main operating queue for records across the workspace. Users can filter the queue, create new records, and open drawers for quick actions without leaving the list.',
+      nextStep:
+        recordPage.total === 0
+          ? 'Create a record or import a CSV so the queue has live records to work from.'
+          : hasActiveFilters
+            ? 'Review the filtered queue, then use the record actions to update owners, notes, stages, or tasks.'
+            : 'Use the filters to narrow the queue or open the next record that needs action.',
+      highlights: ['Shared queue view', 'Live filters', 'Create and import entry points'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'records-create',
+          title: 'Add a record manually',
+          body: 'Use this when a user needs to log a lead, customer, or opportunity directly into the CRM without importing a file.',
+          targetId: 'records-create-button',
+          placement: 'bottom',
+        },
+        {
+          id: 'records-import',
+          title: 'Bring records in from a CSV',
+          body: 'The import flow is the fastest way to scaffold a batch of records and map the columns into the shared workspace schema.',
+          targetId: 'records-import-button',
+          placement: 'bottom',
+        },
+        {
+          id: 'records-filters',
+          title: 'Filter the daily queue',
+          body: 'Use search, pipeline, source, owner, and status filters to shrink the queue to the records that need attention right now.',
+          targetId: 'records-search-input',
+        },
+        {
+          id: 'records-list',
+          title: 'Work the queue without leaving the page',
+          body: 'The list supports quick actions so the user can keep moving records forward without bouncing across multiple screens.',
+          targetId: 'records-list',
+          placement: 'top',
+        },
+      ],
+    }),
+    [hasActiveFilters, recordPage.total],
+  );
+
+  usePageGuide(guide);
 
   async function handleSignOut() {
     await signOut();
@@ -434,10 +484,15 @@ export function RecordsPage() {
           description="Review records, triage follow-ups, and manage owner assignments from a single operational queue."
           actions={(
             <>
-              <Link to="/imports" className={buttonStyles('secondary', 'sm')}>
+              <Link to="/imports" className={buttonStyles('secondary', 'sm')} data-guide-id="records-import-button">
                 Import records
               </Link>
-              <button type="button" onClick={handleOpenCreateDrawer} className={buttonStyles('primary', 'sm')}>
+              <button
+                type="button"
+                onClick={handleOpenCreateDrawer}
+                className={buttonStyles('primary', 'sm')}
+                data-guide-id="records-create-button"
+              >
                 Create record
               </button>
             </>
@@ -496,6 +551,7 @@ export function RecordsPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                   <input
                     value={filters.search}
+                    data-guide-id="records-search-input"
                     onChange={(event) =>
                       updateFilters((current) => ({
                         ...current,
@@ -598,31 +654,33 @@ export function RecordsPage() {
           <SectionSkeleton title="Queue filters" rows={3} />
         )}
 
-        {config ? (
-          loading && recordPage.items.length === 0 && recordPage.total === 0 ? (
+        <div data-guide-id="records-list">
+          {config ? (
+            loading && recordPage.items.length === 0 && recordPage.total === 0 ? (
+              <RecordListSkeleton rows={6} />
+            ) : (
+              <RecordList
+                records={recordPage.items}
+                config={config}
+                crmType={workspace.crmType}
+                hasActiveFilters={hasActiveFilters}
+                isRefreshing={refreshing}
+                pagination={recordPage}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+                onCreateRecord={handleOpenCreateDrawer}
+                onClearFilters={() => {
+                  setFilters(defaultFilters);
+                  setPage(defaultPage);
+                }}
+                onEditLead={handleOpenEditDrawer}
+                onOpenAction={handleOpenQuickAction}
+              />
+            )
+          ) : loading || configLoading ? (
             <RecordListSkeleton rows={6} />
-          ) : (
-            <RecordList
-              records={recordPage.items}
-              config={config}
-              crmType={workspace.crmType}
-              hasActiveFilters={hasActiveFilters}
-              isRefreshing={refreshing}
-              pagination={recordPage}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
-              onCreateRecord={handleOpenCreateDrawer}
-              onClearFilters={() => {
-                setFilters(defaultFilters);
-                setPage(defaultPage);
-              }}
-              onEditLead={handleOpenEditDrawer}
-              onOpenAction={handleOpenQuickAction}
-            />
-          )
-        ) : loading || configLoading ? (
-          <RecordListSkeleton rows={6} />
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       {config ? (

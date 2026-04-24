@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { completeSignup } from '../../lib/auth-helpers';
 import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils';
 import type { CRMType } from '../../lib/types';
+import type { AppPageGuide } from '../../context/AppGuideContext';
 import { useAuth } from '../../hooks/useAuth';
+import { usePageGuide } from '../../hooks/useAppGuide';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { WorkspaceSetupFields } from './WorkspaceSetupFields';
@@ -21,6 +23,42 @@ export function CompleteOnboardingForm() {
   const [errors, setErrors] = useState<
     Partial<Record<'fullName' | 'workspaceName' | 'workspaceSlug' | 'crmType', string>>
   >({});
+
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'auth-complete-onboarding',
+      title: 'Finish workspace onboarding',
+      summary:
+        'This page appears when the account exists but the shared CoreFlow workspace has not been created yet. Completing it unlocks the rest of the app.',
+      nextStep: 'Confirm the user profile, choose the workspace details, and finish onboarding.',
+      highlights: ['Workspace creation', 'CRM mode selection', 'Shared platform setup'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'onboarding-name',
+          title: 'Confirm the profile name',
+          body: 'This name is used inside the workspace for ownership and activity history.',
+          targetId: 'complete-onboarding-name',
+        },
+        {
+          id: 'onboarding-workspace',
+          title: 'Set the workspace identity',
+          body: 'The workspace name, slug, and CRM mode become the shared context for records, voice, email, and account settings.',
+          targetId: 'complete-onboarding-workspace-name',
+        },
+        {
+          id: 'onboarding-submit',
+          title: 'Finish and enter the platform',
+          body: 'Submitting here creates the workspace, links the account, and routes the user into the right dashboard.',
+          targetId: 'complete-onboarding-submit',
+          placement: 'top',
+        },
+      ],
+    }),
+    [],
+  );
+
+  usePageGuide(guide);
 
   useEffect(() => {
     setFullName(
@@ -87,6 +125,7 @@ export function CompleteOnboardingForm() {
     <form className="space-y-6" onSubmit={handleSubmit}>
       <Input
         label="Your name"
+        data-guide-id="complete-onboarding-name"
         placeholder="Jordan Lee"
         value={fullName}
         onChange={(event) => setFullName(event.target.value)}
@@ -97,6 +136,11 @@ export function CompleteOnboardingForm() {
         workspaceName={workspaceName}
         workspaceSlug={workspaceSlug}
         crmType={crmType}
+        guideIds={{
+          workspaceName: 'complete-onboarding-workspace-name',
+          workspaceSlug: 'complete-onboarding-workspace-slug',
+          crmType: 'complete-onboarding-crm-mode',
+        }}
         errors={errors}
         onWorkspaceNameChange={updateWorkspaceName}
         onWorkspaceSlugChange={(value) => {
@@ -106,7 +150,7 @@ export function CompleteOnboardingForm() {
         onCrmTypeChange={setCrmType}
       />
 
-      <Button type="submit" className="w-full" loading={loading}>
+      <Button type="submit" className="w-full" loading={loading} data-guide-id="complete-onboarding-submit">
         Finish onboarding
       </Button>
     </form>

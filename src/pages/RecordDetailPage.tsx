@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
+import type { AppPageGuide } from '../context/AppGuideContext';
 import { RecordActivityTimeline } from '../components/records/RecordActivityTimeline';
 import { RecordForm } from '../components/records/RecordForm';
 import { RecordNotesSection } from '../components/records/RecordNotesSection';
@@ -11,6 +12,7 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
+import { usePageGuide } from '../hooks/useAppGuide';
 import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import {
   addRecordNote,
@@ -235,11 +237,55 @@ export function RecordDetailPage() {
     config?.pipelines.find((pipeline) => pipeline.id === visibleDetail?.record.pipeline_id)?.stages ??
     config?.pipelines.flatMap((pipeline) => pipeline.stages) ??
     [];
+  const guide = useMemo<AppPageGuide>(
+    () => ({
+      key: 'record-detail',
+      title: 'Work a single record in depth',
+      summary:
+        'This detail page brings record fields, notes, tasks, activity history, and email-sequence controls together so users can manage one record end to end.',
+      nextStep:
+        visibleDetail
+          ? 'Review the main form first, then update stage, notes, tasks, or email follow-up based on the latest contact status.'
+          : 'Wait for the record detail to finish loading so the full activity and editing view becomes available.',
+      highlights: ['Full record editing', 'Stage movement', 'Tasks, notes, and follow-up'],
+      autoStart: 'once' as const,
+      steps: [
+        {
+          id: 'record-detail-header',
+          title: 'Orient around the record header',
+          body: 'This header confirms which record you are editing and gives a quick path back to the queue.',
+          targetId: 'record-detail-header',
+        },
+        {
+          id: 'record-detail-stage',
+          title: 'Move the record through the pipeline',
+          body: 'Use the quick stage controls when the record needs to advance or change status without editing the rest of the form.',
+          targetId: 'record-detail-stage',
+        },
+        {
+          id: 'record-detail-form',
+          title: 'Update the record fields',
+          body: 'The main form combines the fixed CRM fields and the workspace-specific custom fields for this record.',
+          targetId: 'record-detail-form',
+        },
+        {
+          id: 'record-detail-tasks',
+          title: 'Capture next actions',
+          body: 'Use notes and tasks to keep the record operationally actionable for the rest of the team.',
+          targetId: 'record-detail-tasks',
+          placement: 'top',
+        },
+      ],
+    }),
+    [visibleDetail],
+  );
+
+  usePageGuide(guide);
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
       <div className="space-y-5">
-        <div>
+        <div data-guide-id="record-detail-header">
           <Link to="/records" className="text-sm text-accent-blue transition hover:text-accent-blue">
             Back to records
           </Link>
@@ -290,7 +336,7 @@ export function RecordDetailPage() {
               </Card>
             </div>
 
-            <Card className="p-6">
+            <Card className="p-6" data-guide-id="record-detail-stage">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Quick stage move</div>
@@ -369,17 +415,19 @@ export function RecordDetailPage() {
               </div>
             </Card>
 
-            <RecordForm
-              key={visibleDetail.record.id}
-              workspaceId={workspaceId}
-              config={config}
-              initialRecord={visibleDetail.record}
-              initialCustom={visibleDetail.custom}
-              submitLabel="Save changes"
-              onSubmit={handleSave}
-            />
+            <div data-guide-id="record-detail-form">
+              <RecordForm
+                key={visibleDetail.record.id}
+                workspaceId={workspaceId}
+                config={config}
+                initialRecord={visibleDetail.record}
+                initialCustom={visibleDetail.custom}
+                submitLabel="Save changes"
+                onSubmit={handleSave}
+              />
+            </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]" data-guide-id="record-detail-tasks">
               <RecordNotesSection notes={visibleDetail.notes} onAddNote={handleAddNote} />
               <div id="tasks">
                 <RecordTasksSection
