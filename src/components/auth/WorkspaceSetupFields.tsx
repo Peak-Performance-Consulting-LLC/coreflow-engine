@@ -31,8 +31,8 @@ export function WorkspaceSetupFields({
   const previewUrl = `${slugPreviewPrefix}${workspaceSlug}`;
 
   return (
-    <div className="space-y-5">
-      <div className={`grid gap-5 ${singleColumn ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+    <div className="space-y-4">
+      <div className={`grid gap-4 ${singleColumn ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
         <Input
           label="Workspace name"
           placeholder="CoreFlow Ventures"
@@ -51,9 +51,9 @@ export function WorkspaceSetupFields({
       </div>
 
       {showSlugPreview && hasSlug ? (
-        <div className="rounded-2xl border border-slate-300 bg-white px-4 py-3">
-          <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Workspace URL preview</div>
-          <div className="mt-1 text-sm font-medium text-slate-800">{previewUrl}</div>
+        <div className="rounded-2xl border border-slate-300 bg-white px-4 py-2.5">
+          <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Workspace URL preview</div>
+          <div className="mt-1 text-xs font-medium text-slate-800">{previewUrl}</div>
         </div>
       ) : null}
 

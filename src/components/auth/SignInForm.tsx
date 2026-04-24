@@ -1,6 +1,7 @@
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath } from '../../lib/utils';
@@ -100,9 +101,28 @@ export function SignInForm() {
   }
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit}>
+    <form className="relative space-y-4" onSubmit={handleSubmit}>
+      <motion.div
+        className="pointer-events-none absolute -right-2 -top-4 hidden h-20 w-20 sm:block"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+      >
+        <motion.span
+          className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.65)]"
+          animate={{ scale: [1, 1.45, 1], opacity: [0.65, 1, 0.65] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <span className="absolute inset-3 rounded-full border border-dashed border-indigo-200" />
+        <motion.span
+          className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 shadow-glow"
+          animate={{ rotate: [0, -360] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+        />
+        <LogIn className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
+      </motion.div>
+
       {!isSupabaseReady ? <ConfigurationNotice /> : null}
-      <div className="grid gap-5">
+      <div className="grid gap-4">
         <Input
           label="Email"
           type="email"
@@ -132,8 +152,8 @@ export function SignInForm() {
         />
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <label className="inline-flex items-center gap-3 text-sm text-slate-700">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <label className="inline-flex items-center gap-2.5 text-xs text-slate-700">
           <input
             type="checkbox"
             checked={rememberMe}
@@ -145,18 +165,29 @@ export function SignInForm() {
         <button
           type="button"
           onClick={() => toast.info('Password reset UI is next on the roadmap.')}
-          className="text-sm text-accent-blue transition hover:text-accent-blue"
+          className="text-xs font-medium text-accent-blue transition hover:text-accent-blue"
         >
           Forgot password?
         </button>
       </div>
 
-      <Button type="submit" className="w-full" loading={loading}>
-        Sign In
+      <Button type="submit" size="sm" className="group relative h-8 w-full overflow-hidden text-xs" loading={loading}>
+        <span className="relative z-10">Sign In</span>
+        <LogIn className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-1" />
+        <span className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-indigo-600 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
       </Button>
 
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35 }}
+        className="text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
+      >
+        Secure workspace routing | Session restored automatically
+      </motion.p>
+
       {!hideSignUpOption ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-center text-xs leading-4 text-slate-600">
           New to CoreFlow?{' '}
           <Link to="/signup" className="font-medium text-accent-blue transition hover:text-accent-blue">
             Create your account

@@ -1,6 +1,9 @@
-import { Eye, EyeOff } from 'lucide-react';
+// SignUpForm.tsx
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { toast } from 'sonner';
 import { completeSignup } from '../../lib/auth-helpers';
 import { getSupabaseClient } from '../../lib/supabaseClient';
@@ -27,10 +30,30 @@ type FormErrors = Partial<
   >
 >;
 
+const smoothEase = [0.21, 0.47, 0.32, 0.98] as const;
+
+const formVariants: Variants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 300 : -300,
+    opacity: 0,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    transition: { duration: 0.4, ease: smoothEase },
+  },
+  exit: (direction: number) => ({
+    x: direction < 0 ? 300 : -300,
+    opacity: 0,
+    transition: { duration: 0.3 },
+  }),
+};
+
 export function SignUpForm() {
   const navigate = useNavigate();
   const { isSupabaseReady, refreshWorkspace } = useAuth();
   const [step, setStep] = useState<1 | 2>(1);
+  const [direction, setDirection] = useState(0);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,6 +102,11 @@ export function SignUpForm() {
     }
   }
 
+  function goToStep(newStep: 1 | 2) {
+    setDirection(newStep === 2 ? 1 : -1);
+    setStep(newStep);
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -93,7 +121,7 @@ export function SignUpForm() {
     }
 
     if (step === 1) {
-      setStep(2);
+      goToStep(2);
       return;
     }
 
@@ -163,152 +191,248 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="space-y-8" onSubmit={handleSubmit}>
+    <form className="relative space-y-4" onSubmit={handleSubmit}>
+      <motion.div
+        className="pointer-events-none absolute -right-2 -top-3 hidden h-16 w-16 sm:block"
+        animate={{ rotate: [0, 10, -8, 0], scale: [1, 1.05, 0.98, 1] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <motion.span
+          className="absolute inset-3 rounded-full border border-indigo-200"
+          animate={{ scale: [0.8, 1.35], opacity: [0.55, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+        />
+        <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 shadow-glow" />
+        <Sparkles className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
+      </motion.div>
+
       <SignupStepIndicator currentStep={step} />
 
       {!isSupabaseReady ? <ConfigurationNotice /> : null}
 
-      {step === 1 ? (
-        <section className="space-y-5">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-600">Account details</h2>
-            <p className="mt-1 text-sm text-slate-600">Add your personal login details first.</p>
-          </div>
+      <div className="relative overflow-hidden">
+        <AnimatePresence mode="wait" custom={direction}>
+          {step === 1 ? (
+            <motion.section
+              key="step1"
+              custom={direction}
+              variants={formVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="space-y-4"
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Account details</h2>
+                <p className="mt-1 text-xs text-slate-600">Add your personal login details first.</p>
+              </motion.div>
 
-          <Input
-            label="Full name"
-            placeholder="Jordan Lee"
-            autoComplete="name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            error={errors.fullName}
-          />
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@company.com"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            error={errors.email}
-          />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Input
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Create a password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              error={errors.password}
-              hint="At least 8 characters and one number."
-              rightElement={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="text-slate-600 transition hover:text-slate-900"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              }
-            />
-            <Input
-              label="Confirm password"
-              type={showConfirmPassword ? 'text' : 'password'}
-              placeholder="Repeat your password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              error={errors.confirmPassword}
-              rightElement={
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((current) => !current)}
-                  className="text-slate-600 transition hover:text-slate-900"
-                >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              }
-            />
-          </div>
-        </section>
-      ) : (
-        <>
-          <section className="space-y-5">
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-600">Workspace setup</h2>
-              <p className="mt-1 text-sm text-slate-600">Now create your workspace and choose your business template.</p>
-            </div>
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <Input
+                  label="Full name"
+                  placeholder="Jordan Lee"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  error={errors.fullName}
+                />
+              </motion.div>
 
-            <WorkspaceSetupFields
-              workspaceName={workspaceName}
-              workspaceSlug={workspaceSlug}
-              crmType={crmType}
-              errors={errors}
-              onWorkspaceNameChange={updateWorkspaceName}
-              onWorkspaceSlugChange={(value) => {
-                setSlugTouched(true);
-                setWorkspaceSlug(slugify(value));
-              }}
-              onCrmTypeChange={setCrmType}
-              singleColumn
-              showSlugPreview
-              slugPreviewPrefix={typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}
-            />
-          </section>
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.25 }}
+              >
+                <Input
+                  label="Email"
+                  type="email"
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  error={errors.email}
+                />
+              </motion.div>
 
-          <div className="space-y-3">
-            <label className="inline-flex items-start gap-3 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(event) => setTermsAccepted(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-indigo-200 bg-white text-accent-blue focus:ring-accent-blue"
-              />
-              <span>
-                I agree to the terms, privacy expectations, and workspace ownership rules for this launch build.
-              </span>
-            </label>
-            {errors.terms ? <p className="text-xs text-rose-300">{errors.terms}</p> : null}
-          </div>
-        </>
-      )}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+                className="grid gap-4 lg:grid-cols-2"
+              >
+                <Input
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Create a password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  error={errors.password}
+                  hint="At least 8 characters and one number."
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      className="text-slate-600 transition hover:text-slate-900"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  }
+                />
+                <Input
+                  label="Confirm password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Repeat your password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  error={errors.confirmPassword}
+                  rightElement={
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                      className="text-slate-600 transition hover:text-slate-900"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  }
+                />
+              </motion.div>
+            </motion.section>
+          ) : (
+            <motion.section
+              key="step2"
+              custom={direction}
+              variants={formVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="space-y-4"
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-accent-blue" />
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Workspace setup</h2>
+                </div>
+                <p className="mt-1 text-xs text-slate-600">Now create your workspace and choose your business template.</p>
+              </motion.div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <WorkspaceSetupFields
+                  workspaceName={workspaceName}
+                  workspaceSlug={workspaceSlug}
+                  crmType={crmType}
+                  errors={errors}
+                  onWorkspaceNameChange={updateWorkspaceName}
+                  onWorkspaceSlugChange={(value) => {
+                    setSlugTouched(true);
+                    setWorkspaceSlug(slugify(value));
+                  }}
+                  onCrmTypeChange={setCrmType}
+                  singleColumn
+                  showSlugPreview
+                  slugPreviewPrefix={typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}
+                />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="space-y-2"
+              >
+                <label className="inline-flex items-start gap-3 text-xs leading-5 text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(event) => setTermsAccepted(event.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-indigo-200 bg-white text-accent-blue focus:ring-accent-blue focus:ring-2 transition-all"
+                  />
+                  <span>
+                    I agree to the terms, privacy expectations, and workspace ownership rules for this launch build.
+                  </span>
+                </label>
+                {errors.terms ? <p className="text-xs text-rose-500 animate-shake">{errors.terms}</p> : null}
+              </motion.div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+      >
         {step === 2 ? (
-          <Button
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             type="button"
-            variant="ghost"
-            onClick={() => {
-              setStep(1);
-              setErrors((current) => ({
-                fullName: current.fullName,
-                email: current.email,
-                password: current.password,
-                confirmPassword: current.confirmPassword,
-              }));
-            }}
+            onClick={() => goToStep(1)}
+            className="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-100"
           >
+            <ArrowLeft className="h-4 w-4" />
             Back
-          </Button>
+          </motion.button>
         ) : (
           <span />
         )}
-        <Button type="submit" className="w-full sm:w-auto" loading={loading}>
-          {step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}
+        <Button
+          type="submit"
+          size="sm"
+          className="w-full sm:w-auto group relative h-8 overflow-hidden px-4 text-xs"
+          loading={loading}
+        >
+          <span className="relative z-10">
+            {step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}
+          </span>
+          <ArrowRight className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-1" />
+          <span className="absolute inset-0 bg-gradient-to-r from-accent-blue to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </Button>
-      </div>
+      </motion.div>
 
-      <p className="text-center text-xs uppercase tracking-[0.2em] text-slate-500">
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
+      >
         No credit card required | Takes less than a minute
-      </p>
+      </motion.p>
 
-      <p className="text-sm text-slate-600">
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.55 }}
+        className="text-center text-xs leading-4 text-slate-600"
+      >
         Already have an account?{' '}
-        <Link to="/signin" className="font-medium text-accent-blue transition hover:text-accent-blue">
+        <Link
+          to="/signin"
+          className="group relative font-medium text-accent-blue transition-all hover:text-accent-blue/80"
+        >
           Sign in
+          <span className="absolute bottom-0 left-0 h-0.5 w-0 bg-accent-blue transition-all duration-300 group-hover:w-full" />
         </Link>
-      </p>
+      </motion.p>
     </form>
   );
 }
