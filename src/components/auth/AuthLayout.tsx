@@ -3,7 +3,6 @@ import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { crmOptions } from '../../lib/constants';
-import { GuideHelperCard } from '../guidance/GuideHelperCard';
 import { AnimatedBackground } from '../ui/AnimatedBackground';
 import { LogoMark } from '../ui/LogoMark';
 import { cn } from '../../lib/utils';

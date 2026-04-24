@@ -11,7 +11,6 @@ import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils
 import type { CRMType } from '../../lib/types';
 import { crmOptions } from '../../lib/constants';
 import { useAuth } from '../../hooks/useAuth';
-import { usePageGuide } from '../../hooks/useAppGuide';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';

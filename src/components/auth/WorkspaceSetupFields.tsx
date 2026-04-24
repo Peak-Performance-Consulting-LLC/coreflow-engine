@@ -8,6 +8,7 @@ interface WorkspaceSetupFieldsProps {
   workspaceName: string;
   workspaceSlug: string;
   crmType: CRMType;
+  guideIds?: Partial<Record<'workspaceName' | 'workspaceSlug' | 'crmType', string>>;
   errors: Partial<Record<'workspaceName' | 'workspaceSlug' | 'crmType', string>>;
   onWorkspaceNameChange: (value: string) => void;
   onWorkspaceSlugChange: (value: string) => void;
@@ -22,6 +23,7 @@ export function WorkspaceSetupFields({
   workspaceName,
   workspaceSlug,
   crmType,
+  guideIds,
   errors,
   onWorkspaceNameChange,
   onWorkspaceSlugChange,
@@ -44,6 +46,7 @@ export function WorkspaceSetupFields({
             node: (
               <Input
                 label="Workspace name"
+                data-guide-id={guideIds?.workspaceName}
                 placeholder="CoreFlow Ventures"
                 value={workspaceName}
                 onChange={(event) => onWorkspaceNameChange(event.target.value)}
@@ -56,6 +59,7 @@ export function WorkspaceSetupFields({
             node: (
               <Input
                 label="Workspace slug"
+                data-guide-id={guideIds?.workspaceSlug}
                 placeholder="coreflow-ventures"
                 value={workspaceSlug}
                 onChange={(event) => onWorkspaceSlugChange(event.target.value)}
@@ -111,6 +115,7 @@ export function WorkspaceSetupFields({
         value={crmType}
         onChange={onCrmTypeChange}
         error={errors.crmType}
+        guideId={guideIds?.crmType}
         title="Choose your business type"
         subtitle="You can change this later"
         variant={variant}

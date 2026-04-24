@@ -11,6 +11,7 @@ interface CRMSelectorProps {
   title?: string;
   subtitle?: string;
   variant?: 'default' | 'launch';
+  guideId?: string;
 }
 
 export function CRMSelector({
@@ -20,11 +21,12 @@ export function CRMSelector({
   title = 'Choose your workspace template',
   subtitle = 'Select the setup that best matches your business',
   variant = 'default',
+  guideId,
 }: CRMSelectorProps) {
   const isLaunch = variant === 'launch';
 
   return (
-    <div className={cn('space-y-2.5', isLaunch && 'space-y-3')}>
+    <div className={cn('space-y-2.5', isLaunch && 'space-y-3')} data-guide-id={guideId}>
       <div className="flex items-center justify-between">
         <span className={cn('text-xs font-semibold text-slate-800', isLaunch && 'uppercase tracking-[0.18em] text-indigo-700')}>
           {title}

@@ -1,9 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   BriefcaseBusiness,
+  CalendarDays,
+  Clock3,
+  Globe2,
+  Home,
+  Mail,
   Lock,
   RefreshCw,
   Settings2,
+  ShieldCheck,
+  Sparkles,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -83,6 +90,33 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: Settings2,
   },
 ];
+
+const SECTION_ACCENTS: Record<AccountSectionKey, { glow: string; icon: string; text: string; ring: string }> = {
+  profile: {
+    glow: 'from-indigo-500/16 via-cyan-400/10 to-transparent',
+    icon: 'border-indigo-200 bg-indigo-50 text-indigo-600',
+    text: 'text-indigo-700',
+    ring: 'ring-indigo-200/70',
+  },
+  workspace: {
+    glow: 'from-cyan-500/16 via-blue-400/10 to-transparent',
+    icon: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+    text: 'text-cyan-700',
+    ring: 'ring-cyan-200/70',
+  },
+  security: {
+    glow: 'from-emerald-500/16 via-teal-400/10 to-transparent',
+    icon: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    text: 'text-emerald-700',
+    ring: 'ring-emerald-200/70',
+  },
+  preferences: {
+    glow: 'from-fuchsia-500/16 via-violet-400/10 to-transparent',
+    icon: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+    text: 'text-fuchsia-700',
+    ring: 'ring-fuchsia-200/70',
+  },
+};
 
 const TIMEZONE_DEFAULT = 'UTC';
 const PANEL_TRANSITION = { duration: 0.22, ease: 'easeOut' as const };
@@ -227,8 +261,13 @@ function SettingsNav({
   onSelect: (section: AccountSectionKey) => void;
 }) {
   return (
-    <aside className="w-full border-b border-slate-200 bg-slate-50/80 p-4 lg:w-[280px] lg:shrink-0 lg:border-b-0 lg:border-r lg:p-5">
-      <div className="mb-4 hidden lg:block">
+    <aside className="relative w-full overflow-hidden border-b border-slate-200 bg-white/70 p-4 lg:w-[280px] lg:shrink-0 lg:border-b-0 lg:border-r lg:p-5">
+      <motion.div
+        className="pointer-events-none absolute -left-20 top-16 h-48 w-48 rounded-full bg-indigo-300/20 blur-3xl"
+        animate={{ scale: [1, 1.18, 1], opacity: [0.35, 0.7, 0.35] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <div className="relative mb-4 hidden lg:block">
         <div className="text-xs uppercase tracking-[0.22em] text-accent-blue">Settings</div>
         <h2 className="mt-2 text-xl font-semibold text-slate-950">Account settings</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">Choose one area to manage.</p>
@@ -241,6 +280,7 @@ function SettingsNav({
         {SETTINGS_SECTIONS.map((section) => {
           const Icon = section.icon;
           const active = activeSection === section.key;
+          const accent = SECTION_ACCENTS[section.key];
 
           return (
             <motion.button
@@ -248,27 +288,36 @@ function SettingsNav({
               type="button"
               layout
               onClick={() => onSelect(section.key)}
-              whileHover={{ y: -1 }}  
+              whileHover={{ y: -3, scale: 1.01 }}
               transition={PANEL_TRANSITION}
               className={cn(
-                'group flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition',
+                'group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition',
                 active
-                  ? 'border-indigo-200 bg-white text-indigo-700 shadow-[0_14px_35px_rgba(79,70,229,0.12)]'
+                  ? 'border-indigo-200 bg-white text-indigo-700 shadow-[0_14px_35px_rgba(79,70,229,0.14)]'
                   : 'border-slate-200 bg-white/70 text-slate-600 hover:border-slate-300 hover:bg-white',
               )}
             >
-              <div
+              <div className={cn('absolute inset-0 bg-gradient-to-br opacity-0 transition group-hover:opacity-100', accent.glow, active && 'opacity-100')} />
+              {active ? (
+                <motion.span
+                  layoutId="account-active-section"
+                  className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-accent-blue"
+                />
+              ) : null}
+              <motion.div
+                animate={active ? { rotate: [0, -7, 7, 0], scale: [1, 1.06, 1] } : undefined}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                 className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition',
+                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition',
                   active
-                    ? 'border-indigo-200 bg-indigo-50 text-indigo-600'
+                    ? accent.icon
                     : 'border-slate-200 bg-slate-50 text-slate-500',
                 )}
               >
                 <Icon className="h-4 w-4" />
-              </div>
+              </motion.div>
 
-              <div className="min-w-0">
+              <div className="relative min-w-0">
                 <div className={cn('text-sm font-semibold', active ? 'text-slate-950' : 'text-slate-800')}>
                   {section.label}
                 </div>
@@ -296,45 +345,30 @@ function SectionCard({
   guideId?: string;
 }) {
   return (
-    <Card
-      className="rounded-3xl border-slate-200 bg-white p-5 shadow-[0_14px_40px_rgba(15,23,42,0.05)]"
+    <motion.div
+      whileHover={{ y: -3 }}
+      transition={PANEL_TRANSITION}
+      className="group"
       data-guide-id={guideId}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="font-semibold text-slate-950">{title}</h3>
-          {description ? <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p> : null}
+      <Card className="relative overflow-hidden rounded-3xl border-slate-200 bg-white p-5 shadow-[0_14px_40px_rgba(15,23,42,0.05)] transition group-hover:border-indigo-100 group-hover:shadow-[0_22px_55px_rgba(79,70,229,0.10)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(99,102,241,0.10),transparent_28%),radial-gradient(circle_at_92%_18%,rgba(34,211,238,0.10),transparent_24%)] opacity-80" />
+        <motion.span
+          className="pointer-events-none absolute right-5 top-5 h-2 w-2 rounded-full bg-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.55)]"
+          animate={{ scale: [0.8, 1.5, 0.8], opacity: [0.3, 0.9, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-950">{title}</h3>
+            {description ? <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
 
-      <div className="mt-5">{children}</div>
-    </Card>
-  );
-}
-
-function StatusRow({
-  label,
-  value,
-  helper,
-  badge,
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-  badge?: ReactNode;
-}) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</div>
-          <div className="mt-2 text-sm font-medium text-slate-950">{value}</div>
-          {helper ? <p className="mt-1 text-sm leading-6 text-slate-500">{helper}</p> : null}
-        </div>
-        {badge}
-      </div>
-    </div>
+        <div className="relative mt-5">{children}</div>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -348,13 +382,18 @@ function PreferenceRow({
   control: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between">
-      <div>
+    <motion.div
+      whileHover={{ y: -3 }}
+      transition={PANEL_TRANSITION}
+      className="relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] md:flex-row md:items-center md:justify-between"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/8 via-transparent to-indigo-500/8" />
+      <div className="relative">
         <div className="font-medium text-slate-950">{label}</div>
         <p className="mt-1 text-sm leading-6 text-slate-500">{helper}</p>
       </div>
-      <div className="w-full shrink-0 md:w-[260px]">{control}</div>
-    </div>
+      <div className="relative w-full shrink-0 md:w-[260px]">{control}</div>
+    </motion.div>
   );
 }
 
@@ -702,8 +741,22 @@ export function AccountPage() {
           action={<StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />}
         >
           <div className="flex flex-col gap-5 md:flex-row md:items-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-indigo-500 to-blue-500 text-2xl font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.24)]">
-              {getProfileInitials(profileName, settings?.profile.email)}
+            <div className="relative">
+              <motion.div
+                className="absolute -inset-2 rounded-[32px] border border-indigo-300/50"
+                animate={{ rotate: [0, 360], scale: [1, 1.06, 1] }}
+                transition={{
+                  rotate: { duration: 9, repeat: Infinity, ease: 'linear' },
+                  scale: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
+                }}
+              />
+              <motion.div
+                className="relative flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-500 text-2xl font-semibold text-white shadow-[0_18px_45px_rgba(79,70,229,0.28)]"
+                animate={{ y: [0, -4, 0] }}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                {getProfileInitials(profileName, settings?.profile.email)}
+              </motion.div>
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-2xl font-semibold tracking-tight text-slate-950">{displayName}</div>
@@ -713,6 +766,24 @@ export function AccountPage() {
                 <StatusBadge label={authProviders.join(', ')} />
               </div>
             </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Identity', value: 'Synced', tone: 'text-indigo-700 bg-indigo-50 border-indigo-100' },
+              { label: 'Provider', value: authProviders[0] ?? 'Email', tone: 'text-cyan-700 bg-cyan-50 border-cyan-100' },
+              { label: 'Access', value: profileRole, tone: 'text-violet-700 bg-violet-50 border-violet-100' },
+            ].map((item, index) => (
+              <motion.div
+                key={item.label}
+                className={cn('rounded-2xl border px-3 py-2', item.tone)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.06 }}
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">{item.label}</div>
+                <div className="mt-1 text-sm font-semibold">{item.value}</div>
+              </motion.div>
+            ))}
           </div>
         </SectionCard>
 
@@ -808,6 +879,37 @@ export function AccountPage() {
           ) : null}
         </SectionCard>
 
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { label: 'Workspace', value: workspaceName || 'Untitled', icon: BriefcaseBusiness, className: 'from-cyan-500/14 to-blue-500/8 text-cyan-700' },
+            { label: 'Slug', value: workspaceSlug || 'workspace-slug', icon: Globe2, className: 'from-indigo-500/14 to-violet-500/8 text-indigo-700' },
+            { label: 'Mode', value: businessTypeLabel, icon: Sparkles, className: 'from-fuchsia-500/14 to-pink-500/8 text-fuchsia-700' },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <motion.div
+                key={item.label}
+                className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.06 }}
+                whileHover={{ y: -4, rotate: index === 1 ? -0.4 : 0.4 }}
+              >
+                <div className={cn('absolute inset-0 bg-gradient-to-br', item.className)} />
+                <div className="relative flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/80 shadow-sm">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</div>
+                    <div className="truncate font-semibold text-slate-950">{item.value}</div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
         <SectionCard
           title="Role and access"
           description="Understand what your current workspace role can change."
@@ -827,44 +929,89 @@ export function AccountPage() {
   }
 
   function renderSecuritySection() {
+    const securityRows = [
+      {
+        label: 'Sign-in method',
+        value: authProviders.join(', '),
+        helper: 'Provider linked to your current session.',
+        badge: <StatusBadge label="Active" tone="indigo" />,
+        icon: Mail,
+        tone: 'from-indigo-500/12 to-cyan-400/8',
+      },
+      {
+        label: 'Email verification',
+        value: user?.email_confirmed_at ? 'Verified' : 'Pending verification',
+        helper: 'Verification status for workspace access.',
+        badge: (
+          <StatusBadge
+            label={user?.email_confirmed_at ? 'Verified' : 'Pending'}
+            tone={user?.email_confirmed_at ? 'green' : 'amber'}
+          />
+        ),
+        icon: ShieldCheck,
+        tone: 'from-emerald-500/12 to-teal-400/8',
+      },
+      {
+        label: 'Workspace role',
+        value: profileRole,
+        helper: 'Controls shared workspace setting access.',
+        badge: <StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />,
+        icon: UserRound,
+        tone: 'from-violet-500/12 to-indigo-400/8',
+      },
+      {
+        label: 'Last sign in',
+        value: formatDateTime(user?.last_sign_in_at ?? null),
+        helper: 'Most recent login timestamp.',
+        badge: <StatusBadge label="Recent" tone="indigo" />,
+        icon: Clock3,
+        tone: 'from-cyan-500/12 to-blue-400/8',
+      },
+      {
+        label: 'Session expires',
+        value: sessionExpiresDisplay,
+        helper: 'Current browser session expiry.',
+        badge: <StatusBadge label="Active session" tone="indigo" />,
+        icon: Lock,
+        tone: 'from-rose-500/10 to-indigo-400/8',
+      },
+    ];
+
     return (
       <div className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <StatusRow
-            label="Sign-in method"
-            value={authProviders.join(', ')}
-            helper="Provider linked to your current session."
-            badge={<StatusBadge label="Active" tone="indigo" />}
-          />
-          <StatusRow
-            label="Email verification"
-            value={user?.email_confirmed_at ? 'Verified' : 'Pending verification'}
-            helper="Verification status for workspace access."
-            badge={
-              <StatusBadge
-                label={user?.email_confirmed_at ? 'Verified' : 'Pending'}
-                tone={user?.email_confirmed_at ? 'green' : 'amber'}
-              />
-            }
-          />
-          <StatusRow
-            label="Workspace role"
-            value={profileRole}
-            helper="Controls shared workspace setting access."
-            badge={<StatusBadge label={profileRole} tone={getRoleTone(settings?.workspace.role)} />}
-          />
-          <StatusRow
-            label="Last sign in"
-            value={formatDateTime(user?.last_sign_in_at ?? null)}
-            helper="Most recent login timestamp."
-            badge={<StatusBadge label="Recent" tone="indigo" />}
-          />
-          <StatusRow
-            label="Session expires"
-            value={sessionExpiresDisplay}
-            helper="Current browser session expiry."
-            badge={<StatusBadge label="Active session" tone="indigo" />}
-          />
+          {securityRows.map((row, index) => {
+            const Icon = row.icon;
+            return (
+              <motion.div
+                key={row.label}
+                className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                whileHover={{ y: -4 }}
+              >
+                <div className={cn('absolute inset-0 bg-gradient-to-br', row.tone)} />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div className="flex gap-3">
+                    <motion.div
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/70 bg-white/80 text-indigo-700 shadow-sm"
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: index * 0.15 }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </motion.div>
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{row.label}</div>
+                      <div className="mt-2 text-sm font-medium text-slate-950">{row.value}</div>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">{row.helper}</p>
+                    </div>
+                  </div>
+                  {row.badge}
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
 
         <SectionCard
@@ -905,17 +1052,20 @@ export function AccountPage() {
             label="Timezone"
             helper="Used for local date and time display."
             control={
-              <select
-                value={preferences.timezone}
-                onChange={(event) => setPreferences((current) => ({ ...current, timezone: event.target.value }))}
-                className={INPUT_CLASSES}
-              >
-                {TIMEZONE_OPTIONS.map((timezone) => (
-                  <option key={timezone} value={timezone}>
-                    {timezone}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <Globe2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
+                <select
+                  value={preferences.timezone}
+                  onChange={(event) => setPreferences((current) => ({ ...current, timezone: event.target.value }))}
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  {TIMEZONE_OPTIONS.map((timezone) => (
+                    <option key={timezone} value={timezone}>
+                      {timezone}
+                    </option>
+                  ))}
+                </select>
+              </div>
             }
           />
 
@@ -923,20 +1073,23 @@ export function AccountPage() {
             label="Date format"
             helper="Used in lists, cards, and details."
             control={
-              <select
-                value={preferences.dateFormat}
-                onChange={(event) =>
-                  setPreferences((current) => ({
-                    ...current,
-                    dateFormat: event.target.value as DateFormatOption,
-                  }))
-                }
-                className={INPUT_CLASSES}
-              >
-                <option value="dd/mm/yyyy">DD/MM/YYYY</option>
-                <option value="mm/dd/yyyy">MM/DD/YYYY</option>
-                <option value="yyyy-mm-dd">YYYY-MM-DD</option>
-              </select>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fuchsia-500" />
+                <select
+                  value={preferences.dateFormat}
+                  onChange={(event) =>
+                    setPreferences((current) => ({
+                      ...current,
+                      dateFormat: event.target.value as DateFormatOption,
+                    }))
+                  }
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                  <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                  <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                </select>
+              </div>
             }
           />
 
@@ -944,22 +1097,25 @@ export function AccountPage() {
             label="Default landing page"
             helper="Choose your home base when returning to CoreFlow."
             control={
-              <select
-                value={preferences.landingPage}
-                onChange={(event) =>
-                  setPreferences((current) => ({
-                    ...current,
-                    landingPage: event.target.value as LandingPageOption,
-                  }))
-                }
-                className={INPUT_CLASSES}
-              >
-                <option value="/dashboard">Overview</option>
-                <option value="/records">Records</option>
-                <option value="/imports">Imports</option>
-                <option value="/email">Email</option>
-                <option value="/account">Account</option>
-              </select>
+              <div className="relative">
+                <Home className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-500" />
+                <select
+                  value={preferences.landingPage}
+                  onChange={(event) =>
+                    setPreferences((current) => ({
+                      ...current,
+                      landingPage: event.target.value as LandingPageOption,
+                    }))
+                  }
+                  className={cn(INPUT_CLASSES, 'w-full pl-9')}
+                >
+                  <option value="/dashboard">Overview</option>
+                  <option value="/records">Records</option>
+                  <option value="/imports">Imports</option>
+                  <option value="/email">Email</option>
+                  <option value="/account">Account</option>
+                </select>
+              </div>
             }
           />
         </div>
@@ -990,35 +1146,47 @@ export function AccountPage() {
         transition={{ duration: 0.24, ease: 'easeOut' }}
         className="space-y-5"
       >
-        <div className="rounded-[32px] border border-white/60 bg-white/60 p-1 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-          <PageHeader
-            eyebrow="Account"
-            title="Account"
-            description="Manage your profile, workspace, security, and preferences."
-            actions={
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void loadSettings()}
-                data-guide-id="account-refresh"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-            }
+        <div className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/70 p-1 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(99,102,241,0.16),transparent_30%),radial-gradient(circle_at_90%_18%,rgba(34,211,238,0.14),transparent_28%)]" />
+          <motion.div
+            className="pointer-events-none absolute right-24 top-8 h-3 w-3 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.7)]"
+            animate={{ scale: [0.8, 1.7, 0.8], opacity: [0.35, 0.95, 0.35] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
           />
+          <div className="relative">
+            <PageHeader
+              eyebrow="Account"
+              title="Account"
+              description="Manage your profile, workspace, security, and preferences."
+              actions={
+                <motion.div whileHover={{ y: -2, rotate: 0.5 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void loadSettings()}
+                    data-guide-id="account-refresh"
+                    className="border-indigo-100 bg-white/90 shadow-sm hover:border-indigo-200"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                    Refresh
+                  </Button>
+                </motion.div>
+              }
+            />
+          </div>
         </div>
 
-        <Card className=" overflow-hidden rounded-[34px] border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+        <Card className="overflow-hidden rounded-[34px] border-white/70 bg-white/85 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur">
           <div className="grid lg:grid-cols-[280px_minmax(0,1fr)]">
             <SettingsNav activeSection={activeSection} onSelect={setActiveSection} />
 
-            <main className="min-w-0 flex-1 bg-white">
-              <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+            <main className="min-w-0 flex-1 bg-white/80">
+              <div className="relative overflow-hidden border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div className={cn('absolute inset-0 bg-gradient-to-br opacity-90', SECTION_ACCENTS[activeSection].glow)} />
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.22em] text-accent-blue">
+                  <div className="relative">
+                    <div className={cn('text-xs uppercase tracking-[0.22em]', SECTION_ACCENTS[activeSection].text)}>
                       {activeSectionConfig.label}
                     </div>
                     <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
