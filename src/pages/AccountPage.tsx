@@ -1,17 +1,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   BriefcaseBusiness,
+  Building2,
   CalendarDays,
   Clock3,
+  Fingerprint,
   Globe2,
   Home,
-  Mail,
+  IdCard,
   Lock,
+  Mail,
   RefreshCw,
-  Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   UserRound,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -46,7 +50,7 @@ interface SettingsSection {
   key: AccountSectionKey;
   label: string;
   description: string;
-  icon: typeof UserRound;
+  icon: LucideIcon;
 }
 
 const TIMEZONE_OPTIONS = [
@@ -69,52 +73,79 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     key: 'profile',
     label: 'Profile',
     description: 'Personal details and ownership labels.',
-    icon: UserRound,
+    icon: IdCard,
   },
   {
     key: 'workspace',
     label: 'Workspace',
     description: 'Shared identity and CRM mode.',
-    icon: BriefcaseBusiness,
+    icon: Building2,
   },
   {
     key: 'security',
     label: 'Security',
     description: 'Sign-in, verification, and session.',
-    icon: Lock,
+    icon: Fingerprint,
   },
   {
     key: 'preferences',
     label: 'Preferences',
     description: 'Browser defaults and workspace view.',
-    icon: Settings2,
+    icon: SlidersHorizontal,
   },
 ];
 
-const SECTION_ACCENTS: Record<AccountSectionKey, { glow: string; icon: string; text: string; ring: string }> = {
+const SECTION_ACCENTS: Record<
+  AccountSectionKey,
+  {
+    glow: string;
+    icon: string;
+    text: string;
+    ring: string;
+    bar: string;
+    card: string;
+    iconHalo: string;
+  }
+> = {
   profile: {
-    glow: 'from-indigo-500/16 via-cyan-400/10 to-transparent',
-    icon: 'border-indigo-200 bg-gradient-to-br from-indigo-400 to-indigo-600 text-white shadow-lg shadow-indigo-500/30',
+    glow: 'from-indigo-500/18 via-sky-400/12 to-transparent',
+    icon:
+      'border-indigo-200 bg-gradient-to-br from-indigo-500 via-violet-500 to-sky-500 text-white shadow-lg shadow-indigo-500/35',
     text: 'text-indigo-700',
     ring: 'ring-indigo-200/70',
+    bar: 'from-indigo-500 via-violet-500 to-sky-400',
+    card: 'from-indigo-500/12 via-violet-500/8 to-sky-400/10',
+    iconHalo: 'bg-indigo-400/40',
   },
   workspace: {
-    glow: 'from-cyan-500/16 via-blue-400/10 to-transparent',
-    icon: 'border-cyan-200 bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/30',
+    glow: 'from-cyan-500/18 via-blue-400/12 to-transparent',
+    icon:
+      'border-cyan-200 bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500 text-white shadow-lg shadow-cyan-500/35',
     text: 'text-cyan-700',
     ring: 'ring-cyan-200/70',
+    bar: 'from-cyan-500 via-blue-500 to-indigo-500',
+    card: 'from-cyan-500/12 via-blue-500/8 to-indigo-400/10',
+    iconHalo: 'bg-cyan-400/40',
   },
   security: {
-    glow: 'from-emerald-500/16 via-teal-400/10 to-transparent',
-    icon: 'border-emerald-200 bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-lg shadow-emerald-500/30',
+    glow: 'from-emerald-500/18 via-teal-400/12 to-transparent',
+    icon:
+      'border-emerald-200 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 text-white shadow-lg shadow-emerald-500/35',
     text: 'text-emerald-700',
     ring: 'ring-emerald-200/70',
+    bar: 'from-emerald-500 via-teal-500 to-cyan-500',
+    card: 'from-emerald-500/12 via-teal-500/8 to-cyan-400/10',
+    iconHalo: 'bg-emerald-400/40',
   },
   preferences: {
-    glow: 'from-fuchsia-500/16 via-violet-400/10 to-transparent',
-    icon: 'border-fuchsia-200 bg-gradient-to-br from-fuchsia-400 to-violet-600 text-white shadow-lg shadow-fuchsia-500/30',
+    glow: 'from-fuchsia-500/18 via-violet-400/12 to-transparent',
+    icon:
+      'border-fuchsia-200 bg-gradient-to-br from-fuchsia-500 via-violet-500 to-indigo-500 text-white shadow-lg shadow-fuchsia-500/35',
     text: 'text-fuchsia-700',
     ring: 'ring-fuchsia-200/70',
+    bar: 'from-fuchsia-500 via-violet-500 to-indigo-500',
+    card: 'from-fuchsia-500/12 via-violet-500/8 to-indigo-400/10',
+    iconHalo: 'bg-fuchsia-400/40',
   },
 };
 
@@ -288,43 +319,127 @@ function SettingsNav({
               type="button"
               layout
               onClick={() => onSelect(section.key)}
-              whileHover={{ y: -3, scale: 1.01 }}
-              transition={PANEL_TRANSITION}
-              className={cn(
-                'group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition',
+              whileHover={{ y: -5, scale: 1.025 }}
+              whileTap={{ scale: 0.98 }}
+              animate={
                 active
-                  ? 'border-indigo-200 bg-white text-indigo-700 shadow-[0_14px_35px_rgba(79,70,229,0.14)]'
-                  : 'border-slate-200 bg-white/70 text-slate-600 hover:border-slate-300 hover:bg-white',
+                  ? {
+                    y: [0, -2, 0],
+                    scale: [1, 1.012, 1],
+                  }
+                  : {
+                    y: 0,
+                    scale: 1,
+                  }
+              }
+              transition={
+                active
+                  ? { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }
+                  : PANEL_TRANSITION
+              }
+              className={cn(
+                'group relative flex w-full items-start gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition will-change-transform',
+                active
+                  ? cn(
+                    'border-white bg-white text-slate-950 shadow-[0_18px_42px_rgba(79,70,229,0.16)] ring-2',
+                    accent.ring,
+                  )
+                  : 'border-slate-200 bg-white/70 text-slate-600 hover:border-slate-300 hover:bg-white hover:shadow-[0_14px_32px_rgba(15,23,42,0.08)]',
               )}
             >
-              <div className={cn('absolute inset-0 bg-gradient-to-br opacity-0 transition group-hover:opacity-100', accent.glow, active && 'opacity-100')} />
+              {/* moving colorful card wash */}
+              <motion.div
+                className={cn(
+                  'pointer-events-none absolute inset-0 bg-gradient-to-r opacity-0 transition group-hover:opacity-100',
+                  accent.card,
+                  active && 'opacity-100',
+                )}
+                style={{ backgroundSize: '220% 220%' }}
+                animate={active ? { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] } : undefined}
+                transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
+              />
+
+              {/* soft glow */}
+              <div
+                className={cn(
+                  'pointer-events-none absolute inset-0 bg-gradient-to-br opacity-0 transition group-hover:opacity-100',
+                  accent.glow,
+                  active && 'opacity-100',
+                )}
+              />
+
+              {/* subtle animated shine line */}
+              <motion.div
+                className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-0 group-hover:opacity-100"
+                animate={active ? { x: ['0%', '420%'] } : undefined}
+                transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              />
+
               {active ? (
                 <motion.span
                   layoutId="account-active-section"
-                  className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-accent-blue"
+                  className={cn('absolute inset-y-3 left-0 w-1 rounded-r-full bg-gradient-to-b', accent.bar)}
+                  animate={{ scaleY: [0.72, 1, 0.72], opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ transformOrigin: 'center' }}
                 />
               ) : null}
 
-              {/* Animated Icon for each section */}
+              {/* colorful animated section icon */}
               <motion.div
-                animate={active ? { rotate: [0, -5, 5, 0], scale: [1, 1.08, 1] } : { scale: 1 }}
-                transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+                animate={
+                  active
+                    ? {
+                      y: [0, -3, 0],
+                      rotate: [0, -8, 8, 0],
+                      scale: [1, 1.12, 1],
+                    }
+                    : {
+                      y: 0,
+                      rotate: 0,
+                      scale: 1,
+                    }
+                }
+                whileHover={{ rotate: active ? 0 : -5, scale: 1.09 }}
+                transition={
+                  active
+                    ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+                    : PANEL_TRANSITION
+                }
                 className={cn(
-                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-300',
+                  'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-300 will-change-transform',
                   active
                     ? accent.icon
-                    : 'border-slate-200 bg-slate-50 text-slate-500 group-hover:scale-105 group-hover:shadow-md',
+                    : cn('border-white/80 bg-white/85 shadow-sm group-hover:shadow-md', accent.text),
                 )}
               >
-                <Icon className="h-4 w-4" />
+                {active ? (
+                  <motion.span
+                    className={cn('pointer-events-none absolute -inset-2 rounded-[22px] blur-md', accent.iconHalo)}
+                    animate={{ opacity: [0.15, 0.55, 0.15], scale: [0.85, 1.2, 0.85] }}
+                    transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                ) : null}
+
+                <motion.span
+                  className="relative"
+                  animate={active ? { rotate: [0, 6, -6, 0] } : undefined}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Icon className="h-4 w-4" />
+                </motion.span>
               </motion.div>
 
-              <div className="relative min-w-0">
+              <motion.div
+                className="relative min-w-0"
+                animate={active ? { x: [0, 2, 0] } : { x: 0 }}
+                transition={{ duration: 2.8, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
+              >
                 <div className={cn('text-sm font-semibold', active ? 'text-slate-950' : 'text-slate-800')}>
                   {section.label}
                 </div>
                 <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">{section.description}</p>
-              </div>
+              </motion.div>
             </motion.button>
           );
         })}
@@ -348,13 +463,21 @@ function SectionCard({
 }) {
   return (
     <motion.div
-      whileHover={{ y: -3 }}
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -5, scale: 1.01 }}
+      whileTap={{ scale: 0.995 }}
       transition={PANEL_TRANSITION}
-      className="group"
+      className="group will-change-transform"
       data-guide-id={guideId}
     >
       <Card className="relative overflow-hidden rounded-3xl border-slate-200 bg-white p-5 shadow-[0_14px_40px_rgba(15,23,42,0.05)] transition group-hover:border-indigo-100 group-hover:shadow-[0_22px_55px_rgba(79,70,229,0.10)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_10%,rgba(99,102,241,0.10),transparent_28%),radial-gradient(circle_at_92%_18%,rgba(34,211,238,0.10),transparent_24%)] opacity-80" />
+        <motion.div
+          className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-0 group-hover:opacity-100"
+          animate={{ x: ['0%', '420%'] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
         <motion.span
           className="pointer-events-none absolute right-5 top-5 h-2 w-2 rounded-full bg-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.55)]"
           animate={{ scale: [0.8, 1.5, 0.8], opacity: [0.3, 0.9, 0.3] }}
@@ -385,11 +508,19 @@ function PreferenceRow({
 }) {
   return (
     <motion.div
-      whileHover={{ y: -3 }}
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      whileHover={{ y: -5, scale: 1.01 }}
+      whileTap={{ scale: 0.995 }}
       transition={PANEL_TRANSITION}
-      className="relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] md:flex-row md:items-center md:justify-between"
+      className="group relative flex flex-col gap-3 overflow-hidden rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-fuchsia-100 hover:shadow-[0_18px_42px_rgba(192,38,211,0.10)] md:flex-row md:items-center md:justify-between"
     >
       <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/8 via-transparent to-indigo-500/8" />
+      <motion.div
+        className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-0 group-hover:opacity-100"
+        animate={{ x: ['0%', '420%'] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+      />
       <div className="relative">
         <div className="font-medium text-slate-950">{label}</div>
         <p className="mt-1 text-sm leading-6 text-slate-500">{helper}</p>
