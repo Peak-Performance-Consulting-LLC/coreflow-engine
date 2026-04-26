@@ -19,6 +19,7 @@ export interface CreateLeadFromVoiceCallParams {
   db: EdgeClient;
   workspaceId: string;
   actorUserId: string;
+  voiceCallId: string;
   mappedInput: VoiceLeadCreateInput;
 }
 
@@ -245,6 +246,7 @@ export async function createLeadFromVoiceCall(
 ): Promise<CreateLeadFromVoiceCallResult> {
   const workspaceId = ensureNonEmpty(params.workspaceId, 'workspaceId');
   const actorUserId = ensureNonEmpty(params.actorUserId, 'actorUserId');
+  const voiceCallId = ensureNonEmpty(params.voiceCallId, 'voiceCallId');
 
   if (!isRecord(params.mappedInput) || !isRecord(params.mappedInput.core)) {
     throw new VoiceLeadCreateValidationError('mappedInput.core is required.');
@@ -277,6 +279,8 @@ export async function createLeadFromVoiceCall(
   try {
     const recordDetail = await createRecordForWorkspace(params.db, actorUserId, {
       workspace_id: workspaceId,
+      external_source: 'voice_call',
+      external_key: voiceCallId,
       core: {
         title,
         phone,

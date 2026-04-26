@@ -23,7 +23,7 @@ export interface VoiceAgentTelnyxSyncInput {
   telnyxLanguage: string;
 }
 
-const DEFAULT_ASSISTANT_MODEL = 'gpt-4o-mini';
+const DEFAULT_ASSISTANT_MODEL = 'qwen/qwen3';
 const DEFAULT_ASSISTANT_VOICE = 'af';
 const DEFAULT_TRANSCRIPTION_MODEL = resolveDefaultVoiceAgentTranscriptionModel();
 const DEFAULT_TRANSCRIPTION_LANGUAGE = resolveDefaultVoiceAgentLanguage();

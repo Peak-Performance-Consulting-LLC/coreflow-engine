@@ -22,6 +22,8 @@ export type VoiceActionType =
   | 'schedule_callback';
 export type VoiceActionRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
 export type VoiceArtifactType = 'summary' | 'disposition' | 'follow_up_recommendation' | 'transcript';
+export type VoiceProcessingJobType = 'post_call_pipeline' | 'generate_summary' | 'execute_action_run';
+export type VoiceProcessingJobStatus = 'pending' | 'claimed' | 'running' | 'completed' | 'dead_letter' | 'canceled';
 
 export interface VoiceOpsCallRecord {
   id: string;
@@ -108,6 +110,29 @@ export interface VoiceOpsArtifactRecord {
   updated_at: string;
 }
 
+export interface VoiceOpsProcessingJobRecord {
+  id: string;
+  workspace_id: string;
+  voice_call_id: string | null;
+  action_run_id: string | null;
+  job_type: VoiceProcessingJobType;
+  status: VoiceProcessingJobStatus;
+  idempotency_key: string;
+  attempt_count: number;
+  max_attempts: number;
+  available_at: string;
+  claimed_at: string | null;
+  claim_expires_at: string | null;
+  lock_token: string | null;
+  last_error: string | null;
+  payload: Record<string, unknown>;
+  result_payload: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface VoiceOpsTaskRecord {
   id: string;
   title: string;
@@ -148,6 +173,7 @@ export interface VoiceCallDetailResponse {
   events: VoiceOpsEventRecord[];
   action_runs: VoiceOpsActionRunRecord[];
   artifacts: VoiceOpsArtifactRecord[];
+  processing_jobs: VoiceOpsProcessingJobRecord[];
   linked_record: RecordDetailResponse | null;
 }
 

@@ -7,6 +7,7 @@ import {
   listVoiceCallEventsByVoiceCallId,
   type VoiceCallRow,
 } from './voice-repository.ts';
+import { listVoiceProcessingJobsByVoiceCallId } from './voice-job-repository.ts';
 
 export interface VoiceCallListFilters {
   workspaceId: string;
@@ -186,10 +187,11 @@ export async function getVoiceCallOpsDetail(
   voiceCallId: string,
 ) {
   const call = await findVoiceCallById(db, workspaceId, voiceCallId);
-  const [events, actionRuns, artifacts, linkedRecord] = await Promise.all([
+  const [events, actionRuns, artifacts, processingJobs, linkedRecord] = await Promise.all([
     listVoiceCallEventsByVoiceCallId(db, workspaceId, voiceCallId),
     listVoiceCallActionRunsByVoiceCallId(db, workspaceId, voiceCallId),
     listVoiceCallArtifactsByVoiceCallId(db, workspaceId, voiceCallId),
+    listVoiceProcessingJobsByVoiceCallId(db, workspaceId, voiceCallId),
     call.record_id ? getRecordDetails(db, workspaceId, call.record_id).catch(() => null) : Promise.resolve(null),
   ]);
 
@@ -211,6 +213,7 @@ export async function getVoiceCallOpsDetail(
     events,
     action_runs: actionRuns,
     artifacts,
+    processing_jobs: processingJobs,
     linked_record: linkedRecord,
   };
 }

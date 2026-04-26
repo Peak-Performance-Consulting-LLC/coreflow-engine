@@ -167,6 +167,28 @@ export function VoiceCallDetailDrawer({
                 creatingTaskArtifactId={creatingTaskArtifactId}
                 onCreateTaskFromRecommendation={onCreateTaskFromRecommendation}
               />
+
+              <section className="rounded-3xl border border-slate-300 bg-white p-4">
+                <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Processing jobs</div>
+                <div className="mt-4 space-y-3">
+                  {detail.processing_jobs.length === 0 ? (
+                    <div className="text-sm text-slate-500">No background jobs recorded for this call yet.</div>
+                  ) : detail.processing_jobs.map((job) => (
+                    <div key={job.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-slate-900">{job.job_type}</div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">{job.status}</div>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        Attempts: {job.attempt_count}/{job.max_attempts} · Available: {formatDateTime(job.available_at)}
+                      </div>
+                      {job.last_error ? (
+                        <div className="mt-2 text-xs text-rose-600">{job.last_error}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
               <VoiceCallEventTimeline events={detail.events} />
             </div>
           )}

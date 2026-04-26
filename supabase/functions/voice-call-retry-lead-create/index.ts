@@ -1,10 +1,8 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
 import { applyLeadCreated, findVoiceCallById } from '../_shared/voice-repository.ts';
-import { finalizeVoiceCallOutcome } from '../_shared/voice-outcome-finalizer.ts';
-import { enqueueVoiceActionRunsForOutcome } from '../_shared/voice-action-repository.ts';
-import { runVoiceAction } from '../_shared/voice-action-runner.ts';
 import { retryLeadCreationForVoiceCall } from '../_shared/voice-call-lead-recovery.ts';
+import { processVoicePostCallPipeline } from '../_shared/voice-post-call-pipeline.ts';
 
 function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -53,31 +51,11 @@ Deno.serve(async (request) => {
       voiceCallId,
       recordId: recovered.created.recordId,
     });
-
-    const finalized = await finalizeVoiceCallOutcome({
+    await processVoicePostCallPipeline({
       db: authContext.serviceClient,
       workspaceId,
       voiceCallId,
-      outcomeStatus: 'lead_created',
-      outcomeReason: 'lead_created_retry',
-      outcomeError: null,
     });
-    const runs = await enqueueVoiceActionRunsForOutcome({
-      db: authContext.serviceClient,
-      call: finalized,
-      outcomeStatus: 'lead_created',
-      outcomeReason: finalized.outcome_reason,
-      outcomeError: finalized.outcome_error,
-    });
-
-    for (const run of runs) {
-      await runVoiceAction({
-        db: authContext.serviceClient,
-        workspaceId,
-        actionRunId: run.id,
-        actorUserId: authContext.user.id,
-      });
-    }
 
     return jsonResponse({
       call: await findVoiceCallById(authContext.serviceClient, workspaceId, voiceCallId),

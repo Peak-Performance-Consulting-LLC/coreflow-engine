@@ -12,7 +12,7 @@ import {
 } from '../_shared/voice-agent-transcription.ts';
 import { validateVoiceAgentPayload } from '../_shared/voice-agent-validator.ts';
 
-const DEFAULT_TELNYX_MODEL = 'gpt-4o-mini';
+const DEFAULT_TELNYX_MODEL = 'qwen/qwen3';
 const DEFAULT_TELNYX_VOICE = 'af';
 const DEFAULT_TELNYX_TRANSCRIPTION_MODEL = resolveDefaultVoiceAgentTranscriptionModel();
 const DEFAULT_TELNYX_LANGUAGE = resolveDefaultVoiceAgentLanguage();

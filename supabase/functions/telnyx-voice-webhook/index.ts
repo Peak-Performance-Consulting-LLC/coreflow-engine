@@ -1,7 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import {
   createEdgeClients,
-  resolveWorkspaceVoiceActorUserId,
   type EdgeClient,
 } from '../_shared/server.ts';
 import {
@@ -26,8 +25,6 @@ import {
   applyCallGathering,
   applyCallHangup,
   applyGatherEnded,
-  applyLeadCreated,
-  applyLeadFailed,
   beginEventProcessing,
   findVoiceCallById,
   findWorkspacePhoneNumberById,
@@ -57,11 +54,8 @@ import {
   type VoiceAgentRuntimeConfig,
   type VoiceAgentRow,
 } from '../_shared/voice-agent-repository.ts';
-import { finalizeVoiceCallOutcome } from '../_shared/voice-outcome-finalizer.ts';
-import { enqueueVoiceActionRunsForOutcome } from '../_shared/voice-action-repository.ts';
-import { runVoiceAction } from '../_shared/voice-action-runner.ts';
-import { buildLeadCreateInputFromVoiceCall } from '../_shared/voice-call-lead-recovery.ts';
-import { createLeadFromVoiceCall } from '../_shared/voice-lead-create.ts';
+import { enqueueVoiceProcessingJob } from '../_shared/voice-job-repository.ts';
+import { buildPostCallPipelineJobKey } from '../_shared/voice-post-call-pipeline.ts';
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -144,6 +138,36 @@ function resolveWebhookTraceId(request: Request) {
     ensureNonEmpty(request.headers.get('traceparent')) ??
     ensureNonEmpty(request.headers.get('cf-ray')) ??
     null;
+}
+
+function buildSignatureDebugContext(request: Request) {
+  const signatureHeader = request.headers.get('telnyx-signature-ed25519');
+  const timestampHeader = request.headers.get('telnyx-timestamp');
+  const publicKey = ensureNonEmpty(Deno.env.get('TELNYX_PUBLIC_KEY'));
+  const configuredMaxSkew = ensureNonEmpty(Deno.env.get('TELNYX_SIGNATURE_MAX_SKEW_SECONDS'));
+  const parsedTimestamp = timestampHeader ? Number.parseInt(timestampHeader, 10) : null;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const timestampSkewSeconds = Number.isFinite(parsedTimestamp)
+    ? Math.abs(nowSeconds - Number(parsedTimestamp))
+    : null;
+
+  return {
+    method: request.method,
+    pathname: new URL(request.url).pathname,
+    contentType: ensureNonEmpty(request.headers.get('content-type')),
+    contentLength: ensureNonEmpty(request.headers.get('content-length')),
+    userAgent: ensureNonEmpty(request.headers.get('user-agent')),
+    hasSignatureHeader: Boolean(signatureHeader),
+    signatureHeaderLength: signatureHeader?.length ?? 0,
+    hasTimestampHeader: Boolean(timestampHeader),
+    timestampHeader,
+    parsedTimestamp: Number.isFinite(parsedTimestamp) ? Number(parsedTimestamp) : null,
+    nowSeconds,
+    timestampSkewSeconds,
+    hasPublicKey: Boolean(publicKey),
+    publicKeyLength: publicKey?.length ?? 0,
+    configuredMaxSkewSeconds: configuredMaxSkew ?? null,
+  };
 }
 
 function buildTelnyxLogContext(params: {
@@ -265,67 +289,6 @@ function resolveAssistantId(agent?: Pick<VoiceAgentRow, 'telnyx_assistant_id'> |
   }
 
   return { assistantId: candidate, source: candidate === fromEnv ? 'env' as const : 'agent' as const };
-}
-
-async function syncTelnyxResourceIdsFromEnv(params: {
-  db: EdgeClient;
-  workspaceId: string;
-  workspacePhoneNumberId: string;
-  voiceAgentId: string | null;
-  currentAgentAssistantId: string | null;
-  currentPhoneConnectionId: string | null;
-  logContext: Record<string, unknown>;
-}) {
-  const envAssistantId = ensureNonEmpty(Deno.env.get('TELNYX_ASSISTANT_ID'));
-  const envConnectionId = ensureNonEmpty(Deno.env.get('TELNYX_VOICE_CONNECTION_ID'));
-
-  if (params.voiceAgentId && envAssistantId && envAssistantId !== ensureNonEmpty(params.currentAgentAssistantId)) {
-    try {
-      await params.db
-        .from('voice_agents')
-        .update({
-          telnyx_assistant_id: envAssistantId,
-          telnyx_sync_status: 'synced',
-          telnyx_sync_error: null,
-          telnyx_last_synced_at: new Date().toISOString(),
-        })
-        .eq('workspace_id', params.workspaceId)
-        .eq('id', params.voiceAgentId);
-
-      console.log('[telnyx-voice-webhook] synced voice_agent telnyx_assistant_id from env', {
-        ...params.logContext,
-        voiceAgentId: params.voiceAgentId,
-        assistantIdSource: 'env',
-      });
-    } catch (error) {
-      console.warn('[telnyx-voice-webhook] failed to sync voice_agent telnyx_assistant_id from env', {
-        ...params.logContext,
-        voiceAgentId: params.voiceAgentId,
-        message: safeErrorMessage(error),
-      });
-    }
-  }
-
-  if (envConnectionId && envConnectionId !== ensureNonEmpty(params.currentPhoneConnectionId)) {
-    try {
-      await params.db
-        .from('workspace_phone_numbers')
-        .update({ telnyx_connection_id: envConnectionId })
-        .eq('workspace_id', params.workspaceId)
-        .eq('id', params.workspacePhoneNumberId);
-
-      console.log('[telnyx-voice-webhook] synced workspace_phone_number telnyx_connection_id from env', {
-        ...params.logContext,
-        workspacePhoneNumberId: params.workspacePhoneNumberId,
-      });
-    } catch (error) {
-      console.warn('[telnyx-voice-webhook] failed to sync workspace_phone_number telnyx_connection_id from env', {
-        ...params.logContext,
-        workspacePhoneNumberId: params.workspacePhoneNumberId,
-        message: safeErrorMessage(error),
-      });
-    }
-  }
 }
 
 function safeErrorMessage(error: unknown) {
@@ -705,157 +668,6 @@ async function findExistingVoiceCallBySessionIdGlobal(
   } | null;
 }
 
-async function tryCreateLeadSync(
-  db: EdgeClient,
-  workspaceId: string,
-  voiceCall: VoiceCallRow,
-  logContext: any
-) {
-  const currentCall = await findVoiceCallById(db, workspaceId, voiceCall.id);
-
-  if (
-    currentCall.record_id ||
-    currentCall.lead_creation_status === 'created' ||
-    currentCall.lead_creation_status === 'failed'
-  ) {
-    return currentCall;
-  }
-
-  try {
-    const actorUserId = await resolveWorkspaceVoiceActorUserId(db, workspaceId);
-    const leadCreateInput = await buildLeadCreateInputFromVoiceCall({
-      db,
-      workspaceId,
-      call: currentCall,
-    });
-
-    const created = await createLeadFromVoiceCall({
-      db,
-      workspaceId,
-      actorUserId,
-      mappedInput: leadCreateInput,
-    });
-
-    await applyLeadCreated(db, {
-      workspaceId,
-      voiceCallId: currentCall.id,
-      recordId: created.recordId,
-      leadCreatedAt: new Date().toISOString(),
-    });
-
-    console.log('[telnyx-voice-webhook] sync lead creation successful', {
-      ...logContext,
-      voiceCallId: currentCall.id,
-      recordId: created.recordId,
-    });
-
-    return findVoiceCallById(db, workspaceId, currentCall.id);
-  } catch (error) {
-    const errorMessage = safeErrorMessage(error);
-    console.error('[telnyx-voice-webhook] sync lead creation failed', {
-      ...logContext,
-      voiceCallId: currentCall.id,
-      error: errorMessage,
-    });
-
-    if (isMissingRequiredCrmFieldsError(error)) {
-      await db
-        .from('voice_calls')
-        .update({
-          outcome_status: 'mapping_failed',
-          outcome_reason: 'missing_required_crm_fields',
-          outcome_error: errorMessage,
-          review_status: 'open',
-          review_reason: 'missing_required_crm_fields',
-        })
-        .eq('workspace_id', workspaceId)
-        .eq('id', currentCall.id);
-    } else {
-      await applyLeadFailed(db, {
-        workspaceId,
-        voiceCallId: currentCall.id,
-        errorMessage,
-      });
-    }
-
-    return findVoiceCallById(db, workspaceId, currentCall.id);
-  }
-}
-
-function deriveSyncOutcomeStatus(call: VoiceCallRow | null | undefined) {
-  if (call?.outcome_status === 'mapping_failed') {
-    return 'mapping_failed' as const;
-  }
-
-  if (call?.record_id || call?.lead_creation_status === 'created') {
-    return 'lead_created' as const;
-  }
-
-  if (call?.lead_creation_status === 'failed') {
-    return 'crm_failed' as const;
-  }
-
-  return null;
-}
-
-function deriveSyncOutcomeReason(call: VoiceCallRow | null | undefined, pendingReason: string) {
-  const outcomeStatus = deriveSyncOutcomeStatus(call);
-
-  if (outcomeStatus === 'lead_created') {
-    return 'lead_created';
-  }
-
-  if (outcomeStatus === 'mapping_failed') {
-    return 'missing_required_crm_fields';
-  }
-
-  if (outcomeStatus === 'crm_failed') {
-    return 'crm_write_failed';
-  }
-
-  return pendingReason;
-}
-
-async function finalizeAndTriggerActions(params: {
-  db: EdgeClient;
-  workspaceId: string;
-  voiceCallId: string;
-  outcomeStatus: 'lead_created' | 'crm_failed' | 'gather_incomplete' | 'mapping_failed' | 'ended_without_lead' | 'review_needed';
-  outcomeReason?: string | null;
-  outcomeError?: string | null;
-}) {
-  const call = await finalizeVoiceCallOutcome({
-    db: params.db,
-    workspaceId: params.workspaceId,
-    voiceCallId: params.voiceCallId,
-    outcomeStatus: params.outcomeStatus,
-    outcomeReason: params.outcomeReason,
-    outcomeError: params.outcomeError,
-  });
-  const runs = await enqueueVoiceActionRunsForOutcome({
-    db: params.db,
-    call,
-    outcomeStatus: call.outcome_status ?? params.outcomeStatus,
-    outcomeReason: call.outcome_reason,
-    outcomeError: call.outcome_error,
-  });
-
-  if (runs.length > 0) {
-    const actorUserId = await resolveWorkspaceVoiceActorUserId(params.db, params.workspaceId);
-
-    for (const run of runs) {
-      await runVoiceAction({
-        db: params.db,
-        workspaceId: params.workspaceId,
-        actionRunId: run.id,
-        actorUserId,
-      });
-    }
-  }
-
-  return findVoiceCallById(params.db, params.workspaceId, params.voiceCallId);
-}
-
 async function startInboundNoiseSuppressionForCall(params: {
   workspaceId: string;
   voiceCallId: string;
@@ -1084,9 +896,28 @@ Deno.serve(async (request) => {
   let eventId: string | null = null;
 
   try {
-    const verified = await assertVerifiedTelnyxWebhook(request, {
-      TELNYX_PUBLIC_KEY: Deno.env.get('TELNYX_PUBLIC_KEY'),
-      TELNYX_SIGNATURE_MAX_SKEW_SECONDS: Deno.env.get('TELNYX_SIGNATURE_MAX_SKEW_SECONDS'),
+    const signatureDebugContext = buildSignatureDebugContext(request);
+    let verified: Awaited<ReturnType<typeof assertVerifiedTelnyxWebhook>>;
+
+    try {
+      verified = await assertVerifiedTelnyxWebhook(request, {
+        TELNYX_PUBLIC_KEY: Deno.env.get('TELNYX_PUBLIC_KEY'),
+        TELNYX_SIGNATURE_MAX_SKEW_SECONDS: Deno.env.get('TELNYX_SIGNATURE_MAX_SKEW_SECONDS'),
+      });
+    } catch (error) {
+      console.error('[telnyx-voice-webhook] signature verification failed', {
+        requestTraceId,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        ...signatureDebugContext,
+      });
+      throw error;
+    }
+
+    console.log('[telnyx-voice-webhook] signature verified', {
+      requestTraceId,
+      verifiedTimestamp: verified.verifiedTimestamp,
+      ...signatureDebugContext,
     });
 
     let rawJson: unknown;
@@ -1510,16 +1341,6 @@ Deno.serve(async (request) => {
         logContext: telnyxLogContext,
       });
 
-      await syncTelnyxResourceIdsFromEnv({
-        db,
-        workspaceId,
-        workspacePhoneNumberId: workspacePhoneNumber.id,
-        voiceAgentId: runtimeConfig?.agent?.id ?? null,
-        currentAgentAssistantId: runtimeConfig?.agent?.telnyx_assistant_id ?? null,
-        currentPhoneConnectionId: workspacePhoneNumber.telnyx_connection_id ?? null,
-        logContext: telnyxLogContext,
-      });
-
       console.log('[telnyx-voice-webhook] call.answered deferred setup complete', {
         ...telnyxLogContext,
         workspaceId,
@@ -1562,28 +1383,17 @@ Deno.serve(async (request) => {
         gatherStatus: 'completed',
         gatherCompletedAt: occurredAt,
       });
-
-      const callForLeadCreation = await findVoiceCallById(db, workspaceId, call.id);
-
-      if (callForLeadCreation) {
-        await tryCreateLeadSync(
-          db,
-          workspaceId,
-          callForLeadCreation,
-          telnyxLogContext
-        );
-      }
-
-      const refreshedCall = await findVoiceCallById(db, workspaceId, call.id);
-      const outcomeStatus = deriveSyncOutcomeStatus(refreshedCall) ?? 'review_needed';
-
-      await finalizeAndTriggerActions({
-        db,
+      await enqueueVoiceProcessingJob(db, {
         workspaceId,
         voiceCallId: call.id,
-        outcomeStatus,
-        outcomeReason: deriveSyncOutcomeReason(refreshedCall, 'assistant_conversation_ended'),
-        outcomeError: refreshedCall?.outcome_error ?? null,
+        jobType: 'post_call_pipeline',
+        idempotencyKey: buildPostCallPipelineJobKey(call.id),
+        payload: {
+          source_event_type: normalizedEvent.eventType,
+          provider_event_id: providerEventId,
+          enqueue_reason: 'gather_ended',
+        },
+        maxAttempts: 6,
       });
 
       try {
@@ -1622,25 +1432,23 @@ Deno.serve(async (request) => {
     }
 
     if (normalizedEvent.eventType === 'call.hangup') {
-      const hungup = await applyCallHangup(db, {
+      await applyCallHangup(db, {
         workspaceId,
         voiceCallId: call.id,
         endedAt: occurredAt,
       });
-
-      if (!hungup.outcome_status) {
-        const refreshedCall = await findVoiceCallById(db, workspaceId, call.id);
-        const outcomeStatus = deriveSyncOutcomeStatus(refreshedCall) ?? 'ended_without_lead';
-
-        await finalizeAndTriggerActions({
-          db,
-          workspaceId,
-          voiceCallId: call.id,
-          outcomeStatus,
-          outcomeReason: deriveSyncOutcomeReason(refreshedCall, 'call_hangup_without_lead'),
-          outcomeError: refreshedCall?.outcome_error ?? null,
-        });
-      }
+      await enqueueVoiceProcessingJob(db, {
+        workspaceId,
+        voiceCallId: call.id,
+        jobType: 'post_call_pipeline',
+        idempotencyKey: buildPostCallPipelineJobKey(call.id),
+        payload: {
+          source_event_type: normalizedEvent.eventType,
+          provider_event_id: providerEventId,
+          enqueue_reason: 'call_hangup',
+        },
+        maxAttempts: 6,
+      });
 
       await markEventProcessed(db, { workspaceId, eventId });
       return jsonResponse({ ok: true, handled: normalizedEvent.eventType }, 200);

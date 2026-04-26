@@ -868,6 +868,7 @@ export async function retryLeadCreationForVoiceCall(params: {
     db: params.db,
     workspaceId,
     actorUserId,
+    voiceCallId,
     mappedInput,
   });
 

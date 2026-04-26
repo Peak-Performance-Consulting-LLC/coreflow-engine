@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { GuideHelperCard } from '../guidance/GuideHelperCard';
 import type { WorkspaceSummary } from '../../lib/types';
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardTopbar } from './DashboardTopbar';
@@ -17,7 +16,6 @@ export function WorkspaceLayout({ workspace, onSignOut, children }: WorkspaceLay
       <main className="flex min-h-screen flex-1 flex-col bg-[#EEF0F7]">
         <DashboardTopbar workspace={workspace} onSignOut={onSignOut} />
         <div className="flex-1 px-4 py-5 lg:px-6">
-          <GuideHelperCard />
           {children}
         </div>
       </main>

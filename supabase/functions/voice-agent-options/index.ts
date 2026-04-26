@@ -7,7 +7,7 @@ import {
   resolveDefaultVoiceAgentTranscriptionModel,
 } from '../_shared/voice-agent-transcription.ts';
 
-const DEFAULT_TELNYX_MODEL = 'gpt-4o-mini';
+const DEFAULT_TELNYX_MODEL = 'qwen/qwen3';
 const DEFAULT_TELNYX_VOICE = 'af';
 const DEFAULT_TRANSCRIPTION_MODEL = resolveDefaultVoiceAgentTranscriptionModel();
 const DEFAULT_LANGUAGE = resolveDefaultVoiceAgentLanguage();

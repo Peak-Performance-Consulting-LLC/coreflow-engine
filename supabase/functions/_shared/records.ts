@@ -22,6 +22,8 @@ interface SaveRecordPayload {
   workspace_id: string;
   core?: CoreRecordInput;
   custom?: Record<string, unknown>;
+  external_source?: string | null;
+  external_key?: string | null;
 }
 
 interface RecordFilters {
@@ -68,6 +70,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function normalizeNullableString(value: unknown) {
   const nextValue = getString(value);
   return nextValue.length > 0 ? nextValue : null;
+}
+
+function isUniqueViolation(error: unknown) {
+  return isPlainObject(error) && typeof error.code === 'string' && error.code === '23505';
 }
 
 function normalizeEnumValue(value: unknown, allowed: Set<string>, errorLabel: string) {
@@ -245,6 +251,27 @@ async function getExistingCustomValues(serviceClient: EdgeClient, recordId: stri
   }
 
   return values;
+}
+
+async function findRecordIdByExternalKey(
+  serviceClient: EdgeClient,
+  workspaceId: string,
+  externalSource: string,
+  externalKey: string,
+) {
+  const { data, error } = await serviceClient
+    .from('records')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('external_source', externalSource)
+    .eq('external_key', externalKey)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof data?.id === 'string' && data.id.trim().length > 0 ? data.id : null;
 }
 
 async function validateWorkspaceReference(
@@ -911,6 +938,8 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
   const custom = isPlainObject(payload.custom) ? payload.custom : {};
   const workspaceId = payload.workspace_id;
   const title = getString(core.title);
+  const externalSource = normalizeNullableString(payload.external_source);
+  const externalKey = normalizeNullableString(payload.external_key);
 
   if (title.length < 2) {
     throw new Error('Title is required.');
@@ -969,6 +998,8 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
       assignee_user_id: assigneeUserId,
       status,
       priority,
+      external_source: externalSource,
+      external_key: externalKey,
       created_by: userId,
       updated_by: userId,
     })
@@ -977,7 +1008,24 @@ export async function createRecordForWorkspace(serviceClient: EdgeClient, userId
     )
     .single();
 
-  if (error || !record) {
+  if (error) {
+    if (externalSource && externalKey && isUniqueViolation(error)) {
+      const existingRecordId = await findRecordIdByExternalKey(
+        serviceClient,
+        workspaceId,
+        externalSource,
+        externalKey,
+      );
+
+      if (existingRecordId) {
+        return getRecordDetails(serviceClient, workspaceId, existingRecordId);
+      }
+    }
+
+    throw new Error(error.message || 'Unable to create record.');
+  }
+
+  if (!record) {
     throw new Error(error?.message || 'Unable to create record.');
   }
 

@@ -8,7 +8,12 @@
     {
       "path": "/api/cron/email-manual-dispatch",
       "schedule": "* * * * *"
-    }
+    },
+    {
+  "path": "/api/cron/voice-jobs-dispatch",
+  "schedule": "* * * * *"
+}
+
   ],
   "rewrites": [
     {

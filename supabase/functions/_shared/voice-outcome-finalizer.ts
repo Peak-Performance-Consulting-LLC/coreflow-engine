@@ -89,6 +89,7 @@ export async function finalizeVoiceCallOutcome(params: {
   outcomeError?: string | null;
   reviewStatus?: VoiceReviewStatus;
   reviewOwnerUserId?: string | null;
+  generateArtifacts?: boolean;
 }) {
   const workspaceId = normalizeString(params.workspaceId);
   const voiceCallId = normalizeString(params.voiceCallId);
@@ -116,6 +117,10 @@ export async function finalizeVoiceCallOutcome(params: {
   });
 
   await ensureArtifactPlaceholders(params.db, workspaceId, voiceCallId);
+
+  if (params.generateArtifacts === false) {
+    return updated;
+  }
 
   try {
     await generateVoiceCallSummaryArtifacts({
