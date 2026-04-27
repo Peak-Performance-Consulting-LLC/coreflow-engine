@@ -18,6 +18,19 @@ export interface WorkspaceTeamInvite {
   created_at: string;
 }
 
+export interface WorkspaceInviteEmailDelivery {
+  status: 'sent' | 'failed';
+  provider: 'workspace_sender' | 'supabase_auth' | 'none';
+  message?: string;
+}
+
+export interface WorkspaceInviteResponse {
+  invite: WorkspaceTeamInvite;
+  invite_link?: string | null;
+  reused_existing?: boolean;
+  email_delivery?: WorkspaceInviteEmailDelivery;
+}
+
 export interface WorkspaceTeamResponse {
   members: WorkspaceTeamMember[];
   invites: WorkspaceTeamInvite[];
@@ -49,11 +62,17 @@ export async function getWorkspaceTeam(session: Session, workspaceId: string) {
   });
 }
 
-export async function inviteWorkspaceAgent(session: Session, workspaceId: string, invitedEmail: string) {
-  return invoke<{ invite: WorkspaceTeamInvite }>('workspace-team-invite', session, {
+export async function inviteWorkspaceAgent(
+  session: Session,
+  workspaceId: string,
+  invitedEmail: string,
+  options?: { resendExisting?: boolean },
+) {
+  return invoke<WorkspaceInviteResponse>('workspace-team-invite', session, {
     workspace_id: workspaceId,
     invited_email: invitedEmail,
     role: 'agent',
+    resend_existing: options?.resendExisting ?? false,
   });
 }
 

@@ -36,6 +36,12 @@ verify_jwt = false
 verify_jwt = false
 [functions.get-user-workspace]
 verify_jwt = false
+[functions.workspace-team-get]
+verify_jwt = false
+[functions.workspace-team-invite]
+verify_jwt = false
+[functions.workspace-team-remove]
+verify_jwt = false
 [functions.generate-voice-assistant-config]
 verify_jwt = false
 [functions.import-job-create]

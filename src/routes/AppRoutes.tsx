@@ -6,6 +6,7 @@ import { PublicOnlyRoute } from './PublicOnlyRoute';
 import { HomePage } from '../pages/HomePage';
 import { SignInPage } from '../pages/SignInPage';
 import { SignUpPage } from '../pages/SignUpPage';
+import { InviteAcceptPage } from '../pages/InviteAcceptPage';
 import { CompleteOnboardingPage } from '../pages/CompleteOnboardingPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { RecordsPage } from '../pages/RecordsPage';
@@ -26,6 +27,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/invite/accept" element={<InviteAcceptPage />} />
 
       <Route element={<PublicOnlyRoute />}>
         <Route path="/signin" element={<SignInPage />} />

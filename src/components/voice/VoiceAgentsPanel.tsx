@@ -498,82 +498,87 @@ export function VoiceAgentsPanel({
 
       {detail ? (
         <>
-          <Card className="p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Selected assistant</div>
-                <h3 className="mt-2 font-display text-2xl text-slate-900">{detail.agent.name}</h3>
-                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-                  Manage CRM mappings and ready-number bindings below. Use edit to update the assistant setup in a side drawer.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-600">
-                  <span className="rounded-full border border-slate-300 bg-white px-3 py-1">
-                    Telnyx sync: {detail.agent.telnyx_sync_status}
-                  </span>
-                  {detail.agent.telnyx_assistant_id ? (
-                    <span className="rounded-full border border-slate-300 bg-white px-3 py-1">
-                      Assistant ID: {detail.agent.telnyx_assistant_id}
-                    </span>
-                  ) : null}
-                </div>
-                {detail.agent.telnyx_sync_error ? (
-                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                    {detail.agent.telnyx_sync_error}
-                  </div>
-                ) : null}
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  {detail.agent.status === 'active'
-                    ? 'This assistant is live and can be used for future inbound call handling.'
-                    : detail.agent.status === 'disabled'
-                      ? 'This assistant is turned off. Activate it here when you are ready to use it again.'
-                      : 'This assistant is still a draft. Activate it here when the setup is ready for live use.'}
-                </div>
-                {agentErrorMessage ? (
-                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                    <div>{agentErrorMessage}</div>
-                    {agentActivationIssues.length > 0 ? (
-                      <ul className="mt-2 list-disc pl-5">
-                        {agentActivationIssues.map((issue) => (
-                          <li key={issue}>{issue}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+          <Card className="p-6 rounded-3xl border border-slate-200 shadow-sm bg-white">
+  <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
 
-              <div className="flex items-center gap-3">
-                <div className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs uppercase tracking-[0.24em] text-slate-700">
-                  {detail.agent.status}
-                </div>
-                <Button
-                  type="button"
-                  onClick={handleToggleAgentStatus}
-                  loading={statusActionLoading}
-                  className={
-                    detail.agent.status === 'active'
-                      ? 'border border-amber-300/50 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900'
-                      : undefined
-                  }
-                  variant={detail.agent.status === 'active' ? 'ghost' : 'primary'}
-                >
-                  {detail.agent.status === 'active' ? 'Disable assistant' : 'Activate assistant'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleDeleteAgent}
-                  loading={deletingAgent}
-                  className="border border-rose-300/40 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800"
-                >
-                  Delete assistant
-                </Button>
-                <Button type="button" variant="secondary" onClick={handleOpenEditDrawer}>
-                  Edit assistant
-                </Button>
-              </div>
-            </div>
-          </Card>
+    {/* LEFT SIDE */}
+    <div className="flex items-start gap-4">
+      <div className="h-14 w-14 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl">
+        AI
+      </div>
+
+      <div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wide">
+            {detail.agent.status}
+          </span>
+        </div>
+
+        <h2 className="mt-1 text-2xl font-semibold text-slate-900">
+          {detail.agent.name}
+        </h2>
+
+        <p className="mt-1 text-sm text-slate-600 max-w-xl">
+          Manage CRM mappings and ready-number bindings below.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+          <span className="px-3 py-1 bg-slate-100 rounded-full">
+            Telnyx: {detail.agent.telnyx_sync_status}
+          </span>
+
+          {detail.agent.telnyx_assistant_id && (
+            <span className="px-3 py-1 bg-slate-100 rounded-full">
+              ID: {detail.agent.telnyx_assistant_id}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* RIGHT SIDE BUTTONS */}
+    <div className="flex flex-wrap gap-2">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={handleOpenEditDrawer}
+        className="rounded-xl"
+      >
+        Configure Assistant
+      </Button>
+
+      <Button
+        size="sm"
+        onClick={handleToggleAgentStatus}
+        loading={statusActionLoading}
+        className={`rounded-xl ${
+          detail.agent.status === 'active'
+            ? 'bg-amber-100 text-amber-800'
+            : ''
+        }`}
+      >
+        {detail.agent.status === 'active' ? 'Disable' : 'Activate'}
+      </Button>
+
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleDeleteAgent}
+        loading={deletingAgent}
+        className="rounded-xl text-rose-600"
+      >
+        Delete
+      </Button>
+    </div>
+  </div>
+
+  {/* STATUS INFO BAR */}
+  <div className="mt-5 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
+    {detail.agent.status === 'active'
+      ? 'This assistant is live and can handle inbound calls.'
+      : 'This assistant is not active yet.'}
+  </div>
+</Card>
 
           {configLoading && !config ? (
             <SectionSkeleton title="Field mappings" rows={4} />
