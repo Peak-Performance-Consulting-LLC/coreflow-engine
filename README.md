@@ -95,6 +95,15 @@ supabase functions deploy get-user-workspace
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
+### Email OAuth providers (Google Workspace + Microsoft 365)
+
+Email OAuth needs additional function secrets (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `MICROSOFT_OAUTH_CLIENT_ID`, `MICROSOFT_OAUTH_CLIENT_SECRET`, `EMAIL_CREDENTIALS_ENCRYPTION_KEY`).
+
+See full setup guide:
+
+- `EMAIL_OAUTH_SETUP.md`
+- `supabase/.env.example`
+
 ## Auth, workspace creation, and CRM routing
 
 ### Signup flow

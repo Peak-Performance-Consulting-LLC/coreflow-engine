@@ -200,12 +200,24 @@ export async function initiateOauth(
   workspaceId: string,
 ): Promise<string> {
   const sb = getSupabaseClient();
-  const { data, error } = await sb.functions.invoke<{ authorize_url: string }>('email-oauth-start', {
+  const { data, error } = await sb.functions.invoke<{ authorize_url?: string; error?: string }>('email-oauth-start', {
     body: { provider, workspace_id: workspaceId, return_path: '/email' },
     headers: await getFunctionAuthHeaders(),
   });
-  if (error) throw new Error(error.message);
-  if (!data?.authorize_url) throw new Error('No authorize URL returned.');
+  if (error) {
+    const functionError = typeof data?.error === 'string' ? data.error.trim() : '';
+
+    if (functionError) {
+      throw new Error(functionError);
+    }
+
+    throw new Error(
+      `${error.message}. Check Supabase function secrets for OAuth: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, EMAIL_CREDENTIALS_ENCRYPTION_KEY.`,
+    );
+  }
+  if (!data?.authorize_url) {
+    throw new Error(typeof data?.error === 'string' && data.error ? data.error : 'No authorize URL returned.');
+  }
   return data.authorize_url;
 }
 
