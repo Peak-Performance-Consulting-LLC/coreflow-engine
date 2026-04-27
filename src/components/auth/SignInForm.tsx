@@ -20,6 +20,9 @@ export function SignInForm() {
   const location = useLocation();
   const { isSupabaseReady, refreshWorkspace } = useAuth();
   const routeState = location.state as SignInRouteState;
+  const searchParams = new URLSearchParams(location.search);
+  const inviteMode = searchParams.get('invite') === '1';
+  const invitedEmail = searchParams.get('email')?.trim() ?? '';
   const hideSignUpOption = Boolean(
     routeState?.existingUser ||
       (typeof window !== 'undefined' && window.sessionStorage.getItem(existingUserSignedOutFlagKey) === '1'),
@@ -66,8 +69,8 @@ export function SignInForm() {
   useEffect(() => {
     const stateEmail = routeState?.prefillEmail;
     const storedEmail = window.localStorage.getItem(rememberedEmailKey);
-    setEmail(stateEmail ?? storedEmail ?? '');
-  }, [routeState]);
+    setEmail(stateEmail ?? (invitedEmail || storedEmail || ''));
+  }, [invitedEmail, routeState]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -223,7 +226,10 @@ export function SignInForm() {
       {!hideSignUpOption ? (
         <p className="text-center text-xs leading-4 text-slate-600">
           New to CoreFlow?{' '}
-          <Link to="/signup" className="font-medium text-accent-blue transition hover:text-accent-blue">
+          <Link
+            to={inviteMode ? `/signup?invite=1&email=${encodeURIComponent(email.trim() || invitedEmail)}` : '/signup'}
+            className="font-medium text-accent-blue transition hover:text-accent-blue"
+          >
             Create your account
           </Link>
         </p>

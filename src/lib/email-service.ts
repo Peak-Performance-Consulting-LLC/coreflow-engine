@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabaseClient';
+import type { WorkspaceRole } from './types';
 
 /* ─── Provider metadata ───────────────────────────────────────────────── */
 export type EmailProvider = 'google' | 'microsoft' | 'zoho' | 'hostinger' | 'godaddy' | 'smtp';
@@ -120,7 +121,7 @@ export interface EmailAutomationSettings {
 
 export interface AccountSettingsGetResponse {
   workspace_id?: string;
-  workspace?: { id: string; role: string; can_manage: boolean };
+  workspace?: { id: string; role: WorkspaceRole; can_manage: boolean };
   automation: EmailAutomationSettings;
   senders: EmailSender[];
   sequence_steps: EmailSequenceStep[];

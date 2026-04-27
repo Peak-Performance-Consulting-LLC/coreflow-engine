@@ -11,6 +11,7 @@ import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { SectionSkeleton } from '../components/ui/SectionSkeleton';
 import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
+import { isWorkspaceOwner } from '../lib/utils';
 import type { VoiceNumberRecord } from '../lib/voice-service';
 import { listVoiceNumbers, reconcileVoiceNumber, updateVoiceNumber } from '../lib/voice-service';
 
@@ -28,7 +29,7 @@ function createDraftMap(numbers: VoiceNumberRecord[]) {
 
 export function VoiceNumbersPage() {
   const navigate = useNavigate();
-  const { session, workspace, signOut, user } = useAuth();
+  const { session, workspace, signOut } = useAuth();
   const [numbers, setNumbers] = useState<VoiceNumberRecord[]>([]);
   const [drafts, setDrafts] = useState<Record<string, { label: string; is_active: boolean }>>({});
   const [numbersLoading, setNumbersLoading] = useState(true);
@@ -36,7 +37,7 @@ export function VoiceNumbersPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
 
-  const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const isOwner = isWorkspaceOwner(workspace);
   const readyCount = numbers.filter((number) => number.webhook_status === 'ready').length;
   const activeCount = numbers.filter((number) => number.is_active).length;
   const guide = useMemo<AppPageGuide>(

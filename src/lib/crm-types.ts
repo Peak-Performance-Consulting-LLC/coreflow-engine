@@ -1,4 +1,4 @@
-import type { CRMType } from './types';
+import type { CRMType, WorkspaceRole } from './types';
 
 export type CustomFieldType = 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'multi_select';
 
@@ -28,7 +28,7 @@ export interface RecordSource {
 
 export interface WorkspaceAssignee {
   userId: string;
-  role: string;
+  role: WorkspaceRole;
   fullName: string | null;
 }
 

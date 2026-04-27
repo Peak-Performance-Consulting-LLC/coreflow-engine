@@ -13,6 +13,7 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
+import { isWorkspaceOwner } from '../lib/utils';
 import {
   createVoiceTaskFromRecommendation,
   getVoiceCallDetail,
@@ -34,7 +35,7 @@ const defaultFilters: VoiceCallFilterState = {
 
 export function VoiceOpsPage() {
   const navigate = useNavigate();
-  const { session, workspace, signOut, user } = useAuth();
+  const { session, workspace, signOut } = useAuth();
   const [filters, setFilters] = useState<VoiceCallFilterState>(defaultFilters);
   const [listData, setListData] = useState<VoiceCallListResponse | null>(null);
   const [listLoading, setListLoading] = useState(true);
@@ -275,7 +276,7 @@ export function VoiceOpsPage() {
     return <FullPageLoader label="Loading voice operations..." />;
   }
 
-  const isOwner = workspace.ownerId === user?.id;
+  const isOwner = isWorkspaceOwner(workspace);
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>

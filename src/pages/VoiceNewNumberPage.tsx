@@ -9,12 +9,13 @@ import { VoiceNumberSearchCard } from '../components/voice/VoiceNumberSearchCard
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
+import { isWorkspaceOwner } from '../lib/utils';
 import type { VoiceNumberSearchResult } from '../lib/voice-service';
 import { purchaseVoiceNumber, searchVoiceNumbers } from '../lib/voice-service';
 
 export function VoiceNewNumberPage() {
   const navigate = useNavigate();
-  const { session, workspace, signOut, user } = useAuth();
+  const { session, workspace, signOut } = useAuth();
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<VoiceNumberSearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -28,7 +29,7 @@ export function VoiceNewNumberPage() {
     phone_number_type: '' as 'local' | 'toll_free' | '',
   });
 
-  const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const isOwner = isWorkspaceOwner(workspace);
   const guide = useMemo<AppPageGuide>(
     () => ({
       key: 'voice-new-number',

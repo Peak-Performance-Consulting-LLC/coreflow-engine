@@ -55,6 +55,7 @@ import {
   type VoiceAgentRow,
 } from '../_shared/voice-agent-repository.ts';
 import { enqueueVoiceProcessingJob } from '../_shared/voice-job-repository.ts';
+import { processVoiceProcessingJob } from '../_shared/voice-job-runner.ts';
 import { buildPostCallPipelineJobKey } from '../_shared/voice-post-call-pipeline.ts';
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -249,6 +250,31 @@ function buildGatherInterruptionSettings() {
 
 function commandId(action: 'answer' | 'gather_start' | 'hangup', callControlId: string) {
   return `coreflow:voice:${action}:v1:${callControlId}`;
+}
+
+async function attemptImmediatePostCallPipeline(params: {
+  db: EdgeClient;
+  workspaceId: string;
+  jobId: string;
+  currentStatus: string;
+}) {
+  if (params.currentStatus !== 'pending') {
+    return;
+  }
+
+  try {
+    await processVoiceProcessingJob({
+      db: params.db,
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+    });
+  } catch (error) {
+    console.error('[telnyx-voice-webhook] immediate post-call pipeline handoff failed', {
+      workspaceId: params.workspaceId,
+      jobId: params.jobId,
+      message: error instanceof Error ? error.message : 'Unexpected error.',
+    });
+  }
 }
 
 function assistantStartCommandId(
@@ -1383,7 +1409,7 @@ Deno.serve(async (request) => {
         gatherStatus: 'completed',
         gatherCompletedAt: occurredAt,
       });
-      await enqueueVoiceProcessingJob(db, {
+      const queuedPostCallJob = await enqueueVoiceProcessingJob(db, {
         workspaceId,
         voiceCallId: call.id,
         jobType: 'post_call_pipeline',
@@ -1394,6 +1420,12 @@ Deno.serve(async (request) => {
           enqueue_reason: 'gather_ended',
         },
         maxAttempts: 6,
+      });
+      await attemptImmediatePostCallPipeline({
+        db,
+        workspaceId,
+        jobId: queuedPostCallJob.id,
+        currentStatus: queuedPostCallJob.status,
       });
 
       try {
@@ -1437,7 +1469,7 @@ Deno.serve(async (request) => {
         voiceCallId: call.id,
         endedAt: occurredAt,
       });
-      await enqueueVoiceProcessingJob(db, {
+      const queuedPostCallJob = await enqueueVoiceProcessingJob(db, {
         workspaceId,
         voiceCallId: call.id,
         jobType: 'post_call_pipeline',
@@ -1448,6 +1480,12 @@ Deno.serve(async (request) => {
           enqueue_reason: 'call_hangup',
         },
         maxAttempts: 6,
+      });
+      await attemptImmediatePostCallPipeline({
+        db,
+        workspaceId,
+        jobId: queuedPostCallJob.id,
+        currentStatus: queuedPostCallJob.status,
       });
 
       await markEventProcessed(db, { workspaceId, eventId });

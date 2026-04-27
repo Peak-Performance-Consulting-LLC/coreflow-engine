@@ -18,6 +18,32 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function getPendingJobDelayMinutes(value: string) {
+  const availableAt = Date.parse(value);
+
+  if (!Number.isFinite(availableAt)) {
+    return null;
+  }
+
+  return (Date.now() - availableAt) / 60_000;
+}
+
+function getStalledPipelineHint(detail: VoiceCallDetailResponse) {
+  const pendingPostCallJob = detail.processing_jobs.find((job) => job.job_type === 'post_call_pipeline' && job.status === 'pending');
+
+  if (!pendingPostCallJob || pendingPostCallJob.attempt_count > 0) {
+    return null;
+  }
+
+  const pendingMinutes = getPendingJobDelayMinutes(pendingPostCallJob.available_at);
+
+  if (pendingMinutes === null || pendingMinutes < 2) {
+    return null;
+  }
+
+  return 'Lead creation has not started because the background voice worker has not picked up this job. Check the Vercel voice cron route and the VOICE_JOBS_CRON_SECRET / SUPABASE_URL server environment variables.';
+}
+
 interface VoiceCallDetailDrawerProps {
   isOpen: boolean;
   detail: VoiceCallDetailResponse | null;
@@ -78,6 +104,8 @@ export function VoiceCallDetailDrawer({
   if (!isOpen) {
     return null;
   }
+
+  const stalledPipelineHint = detail ? getStalledPipelineHint(detail) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -171,6 +199,11 @@ export function VoiceCallDetailDrawer({
               <section className="rounded-3xl border border-slate-300 bg-white p-4">
                 <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Processing jobs</div>
                 <div className="mt-4 space-y-3">
+                  {stalledPipelineHint ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      {stalledPipelineHint}
+                    </div>
+                  ) : null}
                   {detail.processing_jobs.length === 0 ? (
                     <div className="text-sm text-slate-500">No background jobs recorded for this call yet.</div>
                   ) : detail.processing_jobs.map((job) => (

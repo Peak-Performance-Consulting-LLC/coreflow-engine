@@ -179,7 +179,7 @@ function getPreferencesStorageKey(userId: string, workspaceId: string) {
 }
 
 function formatRole(role: string | null | undefined) {
-  if (!role) return 'Member';
+  if (!role) return 'Agent';
 
   return role
     .split('_')
@@ -225,7 +225,7 @@ function getRoleTone(role: string | null | undefined) {
   switch (role) {
     case 'owner':
       return 'indigo' as const;
-    case 'admin':
+    case 'agent':
       return 'green' as const;
     default:
       return 'slate' as const;
@@ -236,10 +236,10 @@ function getRoleDescription(role: string | null | undefined) {
   switch (role) {
     case 'owner':
       return 'Owners can manage workspace identity, shared settings, and access-sensitive controls.';
-    case 'admin':
-      return 'Admins can manage most shared workspace settings, but ownership stays with the workspace owner.';
+    case 'agent':
+      return 'Agents can work inside the workspace, but shared workspace settings remain read-only.';
     default:
-      return 'Members can update their own profile and preferences, but shared workspace settings remain read-only.';
+      return 'Agents can update their own profile and preferences, but shared workspace settings remain read-only.';
   }
 }
 
@@ -742,7 +742,7 @@ export function AccountPage() {
     if (!session || !workspace) return;
 
     if (!settings?.workspace.can_manage) {
-      toast.error('Only workspace owners or admins can update workspace settings.');
+      toast.error('Only the workspace owner can update workspace settings.');
       return;
     }
 

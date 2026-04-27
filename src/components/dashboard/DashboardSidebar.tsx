@@ -7,12 +7,12 @@ import {
   PhoneCall,
   PlusCircle,
   Rows3,
+  Users,
   UserCircle2,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { formatCrmLabel } from '../../lib/utils';
+import { formatCrmLabel, isWorkspaceOwner } from '../../lib/utils';
 import type { WorkspaceSummary } from '../../lib/types';
 import { LogoMark } from '../ui/LogoMark';
 
@@ -25,13 +25,13 @@ interface SidebarNavItem {
 }
 
 export function DashboardSidebar({ workspace }: { workspace: WorkspaceSummary }) {
-  const { user } = useAuth();
-  const isOwner = workspace.ownerId === user?.id;
+  const isOwner = isWorkspaceOwner(workspace);
   const workspaceItems: SidebarNavItem[] = [
     { label: 'Overview', icon: LayoutGrid, to: `/dashboard/${workspace.crmType}`, end: true },
     { label: 'Records', icon: Rows3, to: '/records' },
     { label: 'Imports', icon: ArrowDownToLine, to: '/imports' },
     { label: 'Email', icon: Mail, to: '/email', end: true },
+    ...(isOwner ? [{ label: 'Team', icon: Users, to: '/team', end: true }] : []),
     { label: 'Account', icon: UserCircle2, to: '/account', end: true },
   ];
   const ownerVoiceItems: SidebarNavItem[] = [

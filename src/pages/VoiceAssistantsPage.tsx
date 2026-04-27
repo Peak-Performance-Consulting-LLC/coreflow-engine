@@ -8,18 +8,19 @@ import { VoiceAgentsPanel } from '../components/voice/VoiceAgentsPanel';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
+import { isWorkspaceOwner } from '../lib/utils';
 import type { VoiceNumberRecord } from '../lib/voice-service';
 import { listVoiceNumbers } from '../lib/voice-service';
 
 export function VoiceAssistantsPage() {
   const navigate = useNavigate();
-  const { session, workspace, signOut, user } = useAuth();
+  const { session, workspace, signOut } = useAuth();
   const [numbers, setNumbers] = useState<VoiceNumberRecord[]>([]);
   const [numbersLoading, setNumbersLoading] = useState(true);
   const [numbersError, setNumbersError] = useState('');
   const numbersRequestIdRef = useRef(0);
 
-  const isOwner = Boolean(workspace && user && workspace.ownerId === user.id);
+  const isOwner = isWorkspaceOwner(workspace);
   const guide = useMemo<AppPageGuide>(
     () => ({
       key: 'voice-assistants',

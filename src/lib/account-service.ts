@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import type { CRMType } from './types';
+import type { CRMType, WorkspaceRole } from './types';
 import { getSupabaseClient } from './supabaseClient';
 
 export type EmailSenderProvider = 'google' | 'microsoft' | 'smtp';
@@ -15,7 +15,7 @@ export interface AccountWorkspace {
   name: string;
   slug: string;
   crm_type: CRMType;
-  role: string;
+  role: WorkspaceRole;
   can_manage: boolean;
 }
 

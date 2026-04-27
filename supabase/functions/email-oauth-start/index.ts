@@ -1,5 +1,5 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
-import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
+import { authenticateRequest, ensureWorkspaceOwner } from '../_shared/server.ts';
 
 function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -72,7 +72,7 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'provider must be google or microsoft.' }, 400);
     }
 
-    await ensureWorkspaceMembership(authContext.serviceClient, workspaceId, authContext.user.id);
+    await ensureWorkspaceOwner(authContext.serviceClient, workspaceId, authContext.user.id);
 
     const callbackUrl = resolveCallbackUrl();
     const codeVerifier = randomBase64Url(64);

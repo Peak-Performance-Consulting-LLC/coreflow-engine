@@ -1,7 +1,7 @@
 // SignUpForm.tsx
 import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, Rocket, CheckCircle2, X, Shuffle } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { toast } from 'sonner';
@@ -51,11 +51,15 @@ const formVariants: Variants = {
 
 export function SignUpForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isSupabaseReady, refreshWorkspace } = useAuth();
+  const searchParams = new URLSearchParams(location.search);
+  const inviteMode = searchParams.get('invite') === '1';
+  const invitedEmail = searchParams.get('email')?.trim() ?? '';
   const [step, setStep] = useState<1 | 2>(1);
   const [direction, setDirection] = useState(0);
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
@@ -126,7 +130,7 @@ export function SignUpForm() {
       return;
     }
 
-    if (step === 1) {
+    if (step === 1 && !inviteMode) {
       goToStep(2);
       return;
     }
@@ -175,6 +179,18 @@ export function SignUpForm() {
         throw new Error('Unable to open a session after signup.');
       }
 
+      if (inviteMode) {
+        const workspace = await refreshWorkspace(session);
+
+        if (!workspace) {
+          throw new Error('No pending workspace invite was found for this account.');
+        }
+
+        toast.success('Workspace access granted. Welcome to CoreFlow.');
+        navigate(getDashboardPath(workspace), { replace: true });
+        return;
+      }
+
       const workspace = await completeSignup(
         {
           full_name: fullName.trim(),
@@ -212,13 +228,13 @@ export function SignUpForm() {
         <Sparkles className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
       </motion.div>
 
-      <SignupStepIndicator currentStep={step} />
+      {!inviteMode ? <SignupStepIndicator currentStep={step} /> : null}
 
       {!isSupabaseReady ? <ConfigurationNotice /> : null}
 
       <div className="relative overflow-hidden">
         <AnimatePresence mode="wait" custom={direction}>
-          {step === 1 ? (
+          {step === 1 || inviteMode ? (
             <motion.section
               key="step1"
               custom={direction}
@@ -227,14 +243,20 @@ export function SignUpForm() {
               animate="center"
               exit="exit"
               className="space-y-3.5"
-            >
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
               >
-                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Account details</h2>
-                <p className="mt-1 text-xs text-slate-600">Add your personal login details first.</p>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                >
+                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
+                  {inviteMode ? 'Join workspace' : 'Account details'}
+                </h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  {inviteMode
+                    ? 'Create your login with the invited email address, then CoreFlow will attach your workspace automatically.'
+                    : 'Add your personal login details first.'}
+                </p>
               </motion.div>
 
               <motion.div
@@ -265,6 +287,7 @@ export function SignUpForm() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   error={errors.email}
+                  hint={inviteMode ? 'Use the same email address that was invited to the workspace.' : undefined}
                 />
               </motion.div>
 
@@ -574,7 +597,7 @@ export function SignUpForm() {
         transition={{ delay: 0.4 }}
         className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
       >
-        {step === 2 ? (
+        {step === 2 && !inviteMode ? (
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -593,11 +616,11 @@ export function SignUpForm() {
           size="sm"
           className="w-full sm:w-auto group relative h-8 overflow-hidden px-4 text-xs disabled:hover:bg-indigo-600"
           loading={loading}
-          disabled={step === 2 && !crmType}
-          title={step === 2 && !crmType ? 'Select a CRM mode before starting your workspace.' : undefined}
+          disabled={!inviteMode && step === 2 && !crmType}
+          title={!inviteMode && step === 2 && !crmType ? 'Select a CRM mode before starting your workspace.' : undefined}
         >
           <span className="relative z-10">
-            {step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}
+            {inviteMode ? 'Join workspace' : step === 1 ? 'Continue to workspace setup' : 'Start my workspace'}
           </span>
           <ArrowRight className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-1" />
           <span className="absolute inset-0 bg-gradient-to-r from-accent-blue to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -610,7 +633,7 @@ export function SignUpForm() {
         transition={{ delay: 0.5 }}
         className="text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
       >
-        No credit card required | Takes less than a minute
+        {inviteMode ? 'Workspace access will be attached automatically after sign up' : 'No credit card required | Takes less than a minute'}
       </motion.p>
 
       <motion.p
@@ -621,7 +644,7 @@ export function SignUpForm() {
       >
         Already have an account?{' '}
         <Link
-          to="/signin"
+          to={inviteMode ? `/signin?invite=1&email=${encodeURIComponent(email.trim() || invitedEmail)}` : '/signin'}
           className="group relative font-medium text-accent-blue transition-all hover:text-accent-blue/80"
         >
           Sign in

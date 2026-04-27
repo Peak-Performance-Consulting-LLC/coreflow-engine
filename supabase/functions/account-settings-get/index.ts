@@ -12,7 +12,7 @@ function normalizeString(value: unknown) {
 }
 
 function canManageWorkspace(role: string) {
-  return role === 'owner' || role === 'admin';
+  return role === 'owner';
 }
 
 Deno.serve(async (request) => {

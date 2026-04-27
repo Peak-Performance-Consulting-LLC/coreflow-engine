@@ -35,6 +35,10 @@ function normalizeWorkspace(row: { id: string; name: string; slug: string; crm_t
   };
 }
 
+function normalizeEmail(value: string | null | undefined) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 function validatePayload(payload: CompleteSignupPayload) {
   const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -134,6 +138,62 @@ Deno.serve(async (request) => {
 
     if (profileError) {
       return jsonResponse({ error: profileError.message }, 500);
+    }
+
+    const normalizedUserEmail = normalizeEmail(user.email);
+
+    if (normalizedUserEmail) {
+      const { data: pendingInvite, error: pendingInviteError } = await serviceClient
+        .from('workspace_member_invites')
+        .select('id, workspace_id, role, workspaces!inner(id, name, slug, crm_type, owner_id)')
+        .eq('invited_email', normalizedUserEmail)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingInviteError) {
+        return jsonResponse({ error: pendingInviteError.message }, 500);
+      }
+
+      if (pendingInvite) {
+        const workspaceRow = Array.isArray(pendingInvite.workspaces) ? pendingInvite.workspaces[0] : pendingInvite.workspaces;
+
+        if (!workspaceRow) {
+          return jsonResponse({ error: 'Invited workspace could not be resolved.' }, 500);
+        }
+
+        const { error: membershipError } = await serviceClient.from('workspace_members').upsert(
+          {
+            workspace_id: pendingInvite.workspace_id,
+            user_id: user.id,
+            role: pendingInvite.role,
+          },
+          { onConflict: 'workspace_id,user_id' },
+        );
+
+        if (membershipError) {
+          return jsonResponse({ error: membershipError.message }, 500);
+        }
+
+        const acceptedAt = new Date().toISOString();
+        const { error: inviteUpdateError } = await serviceClient
+          .from('workspace_member_invites')
+          .update({
+            status: 'accepted',
+            accepted_by: user.id,
+            accepted_at: acceptedAt,
+            updated_at: acceptedAt,
+          })
+          .eq('id', pendingInvite.id)
+          .eq('status', 'pending');
+
+        if (inviteUpdateError) {
+          return jsonResponse({ error: inviteUpdateError.message }, 500);
+        }
+
+        return jsonResponse({ workspace: normalizeWorkspace(workspaceRow, pendingInvite.role) });
+      }
     }
 
     const { data: workspace, error: workspaceError } = await serviceClient

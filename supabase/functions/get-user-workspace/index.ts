@@ -22,6 +22,99 @@ function normalizeWorkspace(
   };
 }
 
+function normalizeEmail(value: string | null | undefined) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+async function acceptPendingInviteIfNeeded(params: {
+  serviceClient: ReturnType<typeof createClient>;
+  userId: string;
+  userEmail: string | null | undefined;
+}) {
+  const normalizedEmail = normalizeEmail(params.userEmail);
+
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const { data: existingMembership, error: existingMembershipError } = await params.serviceClient
+    .from('workspace_members')
+    .select('role, workspaces!inner(id, name, slug, crm_type, owner_id)')
+    .eq('user_id', params.userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingMembershipError) {
+    throw new Error(existingMembershipError.message);
+  }
+
+  if (existingMembership) {
+    return existingMembership;
+  }
+
+  const { data: invite, error: inviteError } = await params.serviceClient
+    .from('workspace_member_invites')
+    .select('id, workspace_id, role')
+    .eq('invited_email', normalizedEmail)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (inviteError) {
+    throw new Error(inviteError.message);
+  }
+
+  if (!invite) {
+    return null;
+  }
+
+  const { error: membershipInsertError } = await params.serviceClient
+    .from('workspace_members')
+    .upsert(
+      {
+        workspace_id: invite.workspace_id,
+        user_id: params.userId,
+        role: invite.role,
+      },
+      { onConflict: 'workspace_id,user_id' },
+    );
+
+  if (membershipInsertError) {
+    throw new Error(membershipInsertError.message);
+  }
+
+  const acceptedAt = new Date().toISOString();
+  const { error: inviteUpdateError } = await params.serviceClient
+    .from('workspace_member_invites')
+    .update({
+      status: 'accepted',
+      accepted_by: params.userId,
+      accepted_at: acceptedAt,
+      updated_at: acceptedAt,
+    })
+    .eq('id', invite.id)
+    .eq('status', 'pending');
+
+  if (inviteUpdateError) {
+    throw new Error(inviteUpdateError.message);
+  }
+
+  const { data: membership, error: membershipError } = await params.serviceClient
+    .from('workspace_members')
+    .select('role, workspaces!inner(id, name, slug, crm_type, owner_id)')
+    .eq('workspace_id', invite.workspace_id)
+    .eq('user_id', params.userId)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw new Error(membershipError.message);
+  }
+
+  return membership;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -63,13 +156,21 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Unauthorized.' }, 401);
     }
 
-    const { data, error } = await serviceClient
-      .from('workspace_members')
-      .select('role, workspaces!inner(id, name, slug, crm_type, owner_id)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const acceptedMembership = await acceptPendingInviteIfNeeded({
+      serviceClient,
+      userId: user.id,
+      userEmail: user.email,
+    });
+
+    const { data, error } = acceptedMembership
+      ? { data: acceptedMembership, error: null }
+      : await serviceClient
+        .from('workspace_members')
+        .select('role, workspaces!inner(id, name, slug, crm_type, owner_id)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
     if (error) {
       return jsonResponse({ error: error.message }, 500);

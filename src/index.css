@@ -81,6 +81,89 @@
   .input-focus {
     @apply border-slate-200 bg-white transition focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100;
   }
+
+  .ai-cta-button {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(196, 181, 253, 0.6) !important;
+    background-color: #6d28d9 !important;
+    background-image: linear-gradient(135deg, #ec4899 0%, #8b5cf6 44%, #2563eb 100%) !important;
+    background-size: 200% 200%;
+    color: #ffffff !important;
+    box-shadow: 0 16px 34px rgba(139, 92, 246, 0.28);
+    animation: ai-cta-gradient-shift 6.5s ease-in-out infinite;
+  }
+
+  .ai-cta-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 20px 38px rgba(99, 102, 241, 0.34);
+  }
+
+  .ai-cta-button:focus-visible {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.24), 0 0 0 6px rgba(129, 140, 248, 0.42);
+  }
+
+  .ai-cta-button::before {
+    content: '';
+    position: absolute;
+    inset: -20% auto -20% -30%;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    transform: skewX(-22deg);
+    animation: ai-cta-sheen 3.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .ai-cta-button::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    background: radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.24), transparent 34%),
+      radial-gradient(circle at 86% 30%, rgba(191, 219, 254, 0.22), transparent 28%);
+    opacity: 0.95;
+    pointer-events: none;
+  }
+
+  .ai-cta-button > span {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@keyframes ai-cta-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes ai-cta-sheen {
+  0% {
+    transform: translateX(-170%) skewX(-22deg);
+    opacity: 0;
+  }
+
+  14% {
+    opacity: 0.6;
+  }
+
+  42% {
+    transform: translateX(320%) skewX(-22deg);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateX(320%) skewX(-22deg);
+    opacity: 0;
+  }
 }
 
 /* Custom scrollbar */

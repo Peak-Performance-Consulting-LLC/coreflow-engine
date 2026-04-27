@@ -15,13 +15,15 @@ export interface CRMOption {
   accent: string;
 }
 
+export type WorkspaceRole = 'owner' | 'agent';
+
 export interface WorkspaceSummary {
   id: string;
   name: string;
   slug: string;
   crmType: CRMType;
   ownerId: string;
-  role: string;
+  role: WorkspaceRole;
 }
 
 export interface DashboardPersonalization {

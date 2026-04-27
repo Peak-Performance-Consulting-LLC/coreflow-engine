@@ -1,6 +1,6 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { encryptSecret } from '../_shared/email-crypto.ts';
-import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
+import { authenticateRequest, ensureWorkspaceOwner } from '../_shared/server.ts';
 
 const ALLOWED_PROVIDERS = ['google', 'microsoft', 'zoho', 'hostinger', 'godaddy', 'smtp'] as const;
 type EmailProvider = (typeof ALLOWED_PROVIDERS)[number];
@@ -183,6 +183,7 @@ Deno.serve(async (request) => {
         .from('workspace_members')
         .select('workspace_id, role')
         .eq('user_id', authContext.user.id)
+        .eq('role', 'owner')
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -190,9 +191,9 @@ Deno.serve(async (request) => {
       if (memberError) return jsonResponse({ error: memberError.message }, 500);
       if (!memberRow) return jsonResponse({ error: 'No workspace found for this user.' }, 404);
       resolvedWorkspaceId = memberRow.workspace_id;
-    } else {
-      await ensureWorkspaceMembership(authContext.serviceClient, resolvedWorkspaceId, authContext.user.id);
     }
+
+    await ensureWorkspaceOwner(authContext.serviceClient, resolvedWorkspaceId, authContext.user.id);
 
     const body = payload as SenderAddBody;
     const provider = normalizeString(body.provider) as EmailProvider;

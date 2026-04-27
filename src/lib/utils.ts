@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { crmOptions } from './constants';
-import type { CRMType, WorkspaceSummary } from './types';
+import type { CRMType, WorkspaceRole, WorkspaceSummary } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -31,6 +31,12 @@ export function getDashboardPath(workspace: Pick<WorkspaceSummary, 'crmType'> | 
 
 export function formatCrmLabel(crmType: CRMType) {
   return getCrmOption(crmType).label;
+}
+
+export function isWorkspaceOwner(
+  workspace: Pick<WorkspaceSummary, 'role'> | Pick<{ role: WorkspaceRole }, 'role'> | null | undefined,
+) {
+  return workspace?.role === 'owner';
 }
 
 export function getInitials(value: string) {

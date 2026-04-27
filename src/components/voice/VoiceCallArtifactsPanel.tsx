@@ -57,6 +57,18 @@ function renderArtifactBody(artifact: VoiceOpsArtifactRecord) {
   return 'Artifact not generated yet.';
 }
 
+function ArtifactContent({ children }: { children: string }) {
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-inner">
+      <div className="max-h-72 overflow-auto overscroll-contain p-4">
+        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-slate-100">
+          {children}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 interface VoiceCallArtifactsPanelProps {
   call: VoiceOpsCallRecord;
   artifacts: VoiceOpsArtifactRecord[];
@@ -77,9 +89,9 @@ export function VoiceCallArtifactsPanel({
         {artifacts.length === 0 ? (
           <div className="rounded-3xl border border-slate-300 bg-white p-4">
             <div className="text-sm text-slate-700">Raw message history</div>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-slate-600">
+            <ArtifactContent>
               {call.message_history ? JSON.stringify(call.message_history, null, 2) : 'No message history stored.'}
-            </pre>
+            </ArtifactContent>
           </div>
         ) : artifacts.map((artifact) => (
           <div key={artifact.id} className="rounded-3xl border border-slate-300 bg-white p-4">
@@ -107,9 +119,9 @@ export function VoiceCallArtifactsPanel({
                 )}
               </div>
             ) : null}
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-slate-600">
+            <ArtifactContent>
               {renderArtifactBody(artifact)}
-            </pre>
+            </ArtifactContent>
           </div>
         ))}
       </div>

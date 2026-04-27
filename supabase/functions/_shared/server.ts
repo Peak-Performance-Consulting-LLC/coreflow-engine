@@ -10,6 +10,8 @@ export interface AuthenticatedContext {
   user: { id: string; email?: string | null };
 }
 
+export type WorkspaceRole = 'owner' | 'agent';
+
 export function createEdgeClients(request: Request) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -91,8 +93,23 @@ export async function ensureWorkspaceMembership(serviceClient: EdgeClient, works
   return data;
 }
 
+export async function ensureWorkspaceRole(
+  serviceClient: EdgeClient,
+  workspaceId: string,
+  userId: string,
+  allowedRoles: WorkspaceRole[],
+) {
+  const membership = await ensureWorkspaceMembership(serviceClient, workspaceId, userId);
+
+  if (!allowedRoles.includes(membership.role as WorkspaceRole)) {
+    throw new Error('You do not have permission to manage this workspace.');
+  }
+
+  return membership;
+}
+
 export async function ensureWorkspaceOwner(serviceClient: EdgeClient, workspaceId: string, userId: string) {
-  await ensureWorkspaceMembership(serviceClient, workspaceId, userId);
+  await ensureWorkspaceRole(serviceClient, workspaceId, userId, ['owner']);
 
   const { data, error } = await serviceClient
     .from('workspaces')

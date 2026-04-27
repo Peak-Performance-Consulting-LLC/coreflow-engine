@@ -68,7 +68,7 @@ function isValidWorkspaceSlug(value: string) {
 }
 
 function canManageWorkspace(role: string) {
-  return role === 'owner' || role === 'admin';
+  return role === 'owner';
 }
 
 async function upsertSender(
@@ -306,7 +306,7 @@ Deno.serve(async (request) => {
     const workspacePayload = asObject(payload.workspace);
     if (workspacePayload) {
       if (!canManage) {
-        return jsonResponse({ error: 'Only workspace owners or admins can update workspace settings.' }, 403);
+        return jsonResponse({ error: 'Only the workspace owner can update workspace settings.' }, 403);
       }
 
       const patch: Record<string, unknown> = {};
@@ -349,11 +349,19 @@ Deno.serve(async (request) => {
 
     const senderPayload = asObject(payload.sender) as SenderPayload | null;
     if (senderPayload) {
+      if (!canManage) {
+        return jsonResponse({ error: 'Only the workspace owner can manage email senders.' }, 403);
+      }
+
       await upsertSender(authContext.serviceClient, workspaceId, authContext.user.id, senderPayload);
     }
 
     const automationPayload = asObject(payload.automation);
     if (automationPayload) {
+      if (!canManage) {
+        return jsonResponse({ error: 'Only the workspace owner can manage email automation settings.' }, 403);
+      }
+
       const patch: Record<string, unknown> = {
         updated_by: authContext.user.id,
       };
@@ -404,6 +412,10 @@ Deno.serve(async (request) => {
     const sequencePayload = Array.isArray(payload.sequence_steps) ? payload.sequence_steps : null;
 
     if (sequencePayload) {
+      if (!canManage) {
+        return jsonResponse({ error: 'Only the workspace owner can manage email sequence steps.' }, 403);
+      }
+
       if (sequencePayload.length === 0) {
         return jsonResponse({ error: 'sequence_steps cannot be empty.' }, 400);
       }

@@ -20,6 +20,7 @@ import { VoiceNewAssistantPage } from '../pages/VoiceNewAssistantPage';
 import { AccountPage } from '../pages/AccountPage';
 import { EmailPage } from '../pages/EmailPage';
 import { EmailTemplatesPage } from '../pages/EmailTemplatesPage';
+import { TeamPage } from '../pages/TeamPage';
 
 export function AppRoutes() {
   return (
@@ -82,6 +83,7 @@ export function AppRoutes() {
           <Route path="/records/:recordId" element={<RecordDetailPage />} />
           <Route path="/imports" element={<ImportsPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/team" element={<TeamPage />} />
           <Route path="/email" element={<EmailPage />} />
           <Route path="/email/templates" element={<EmailTemplatesPage />} />
         </Route>
