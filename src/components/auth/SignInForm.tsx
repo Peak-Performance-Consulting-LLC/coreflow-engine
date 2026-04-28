@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { completePendingSignupIfAvailable } from '../../lib/auth-helpers';
 import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
@@ -113,13 +114,22 @@ export function SignInForm() {
         window.sessionStorage.removeItem(existingUserSignedOutFlagKey);
       }
 
-      toast.success('Welcome back to CoreFlow.');
-
       if (workspace) {
+        toast.success('Welcome back to CoreFlow.');
         navigate(getDashboardPath(workspace), { replace: true });
-      } else {
-        navigate('/onboarding/complete', { replace: true });
+        return;
       }
+
+      const pendingWorkspace = await completePendingSignupIfAvailable(data.session, data.user);
+      if (pendingWorkspace) {
+        await refreshWorkspace(data.session);
+        toast.success('Workspace created. Welcome to CoreFlow.');
+        navigate(getDashboardPath(pendingWorkspace), { replace: true });
+        return;
+      }
+
+      toast.success('Welcome back to CoreFlow.');
+      navigate('/onboarding/complete', { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in.';
       if (message.toLowerCase().includes('invalid login credentials')) {

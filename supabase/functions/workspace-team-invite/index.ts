@@ -131,6 +131,32 @@ async function buildCustomInviteLink(params: {
   });
 }
 
+async function buildFallbackInviteLink(params: {
+  request: Request;
+  serviceClient: EdgeClient;
+  invitedEmail: string;
+  workspaceId: string;
+  role: string;
+  existingInviteLink: string | null;
+}) {
+  if (params.existingInviteLink) {
+    return params.existingInviteLink;
+  }
+
+  try {
+    return await buildCustomInviteLink({
+      request: params.request,
+      serviceClient: params.serviceClient,
+      invitedEmail: params.invitedEmail,
+      workspaceId: params.workspaceId,
+      role: params.role,
+    });
+  } catch (error) {
+    console.error('Unable to build invite fallback link', error);
+    return null;
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -233,6 +259,7 @@ Deno.serve(async (request) => {
       'A workspace owner';
 
     let inviteLink: string | null = null;
+    let attemptedProvider: 'workspace_sender' | 'supabase_auth' = 'supabase_auth';
     let emailDelivery:
       | { status: 'sent'; provider: 'workspace_sender' | 'supabase_auth'; message?: string }
       | { status: 'failed'; provider: 'workspace_sender' | 'supabase_auth' | 'none'; message: string } = {
@@ -245,6 +272,7 @@ Deno.serve(async (request) => {
       const sender = await getConnectedDefaultSender(authContext.serviceClient, workspaceId);
 
       if (sender) {
+        attemptedProvider = 'workspace_sender';
         inviteLink = await buildCustomInviteLink({
           request,
           serviceClient: authContext.serviceClient,
@@ -299,9 +327,17 @@ Deno.serve(async (request) => {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to send invite email.';
+      inviteLink = await buildFallbackInviteLink({
+        request,
+        serviceClient: authContext.serviceClient,
+        invitedEmail,
+        workspaceId,
+        role,
+        existingInviteLink: inviteLink,
+      });
       emailDelivery = {
         status: 'failed',
-        provider: inviteLink ? 'workspace_sender' : 'supabase_auth',
+        provider: attemptedProvider,
         message,
       };
     }

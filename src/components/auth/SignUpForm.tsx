@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { toast } from 'sonner';
-import { completeSignup } from '../../lib/auth-helpers';
+import { clearPendingSignupMetadata, completeSignup } from '../../lib/auth-helpers';
 import { getSupabaseClient } from '../../lib/supabaseClient';
 import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils';
 import type { CRMType } from '../../lib/types';
@@ -144,13 +144,26 @@ export function SignUpForm() {
 
     try {
       const client = getSupabaseClient();
+      const signUpMetadata = inviteMode
+        ? {
+            full_name: fullName.trim(),
+          }
+        : {
+            full_name: fullName.trim(),
+            pending_workspace_name: workspaceName.trim(),
+            pending_workspace_slug: workspaceSlug.trim(),
+            pending_crm_type: crmType,
+          };
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
         options: {
-          data: {
-            full_name: fullName.trim(),
-          },
+          data: signUpMetadata,
+          ...(!inviteMode && typeof window !== 'undefined'
+            ? {
+                emailRedirectTo: `${window.location.origin}/onboarding/complete`,
+              }
+            : {}),
         },
       });
 
@@ -201,6 +214,7 @@ export function SignUpForm() {
         session,
       );
 
+      await clearPendingSignupMetadata().catch(() => undefined);
       await refreshWorkspace(session);
       toast.success('Workspace created. Welcome to CoreFlow.');
       navigate(getDashboardPath(workspace), { replace: true });

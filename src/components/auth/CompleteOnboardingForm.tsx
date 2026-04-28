@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { completeSignup } from '../../lib/auth-helpers';
+import { completePendingSignupIfAvailable, completeSignup, getPendingSignupPayloadFromUser } from '../../lib/auth-helpers';
 import { getDashboardPath, isValidWorkspaceSlug, slugify } from '../../lib/utils';
 import type { CRMType } from '../../lib/types';
 import type { AppPageGuide } from '../../context/AppGuideContext';
@@ -23,6 +23,8 @@ export function CompleteOnboardingForm() {
   const [errors, setErrors] = useState<
     Partial<Record<'fullName' | 'workspaceName' | 'workspaceSlug' | 'crmType', string>>
   >({});
+  const autoCompleteAttemptedRef = useRef(false);
+  const pendingSignupPayload = useMemo(() => getPendingSignupPayloadFromUser(user), [user]);
 
   const guide = useMemo<AppPageGuide>(
     () => ({
@@ -69,10 +71,51 @@ export function CompleteOnboardingForm() {
   }, [user]);
 
   useEffect(() => {
+    if (!pendingSignupPayload) {
+      return;
+    }
+
+    setFullName((current) => current || pendingSignupPayload.full_name);
+    setWorkspaceName((current) => current || pendingSignupPayload.workspace_name);
+    setWorkspaceSlug((current) => current || pendingSignupPayload.workspace_slug);
+    setCrmType(pendingSignupPayload.crm_type);
+  }, [pendingSignupPayload]);
+
+  useEffect(() => {
     if (workspace) {
       navigate(getDashboardPath(workspace), { replace: true });
     }
   }, [navigate, workspace]);
+
+  useEffect(() => {
+    if (!session || workspace || !pendingSignupPayload || autoCompleteAttemptedRef.current) {
+      return;
+    }
+
+    autoCompleteAttemptedRef.current = true;
+    setLoading(true);
+
+    void completePendingSignupIfAvailable(session, user)
+      .then(async (nextWorkspace) => {
+        if (!nextWorkspace) {
+          return;
+        }
+
+        await refreshWorkspace(session);
+        toast.success('Workspace created. Welcome to CoreFlow.');
+        navigate(getDashboardPath(nextWorkspace), { replace: true });
+      })
+      .catch((error) => {
+        const message =
+          error instanceof Error
+            ? `${error.message} Review your workspace details below to finish setup.`
+            : 'Automatic workspace setup could not be completed. Review your details below.';
+        toast.error(message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [navigate, pendingSignupPayload, refreshWorkspace, session, user, workspace]);
 
   function updateWorkspaceName(value: string) {
     setWorkspaceName(value);

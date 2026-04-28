@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import type {
   CompleteSignupPayload,
+  CRMType,
   CompleteSignupResponse,
   WorkspaceLookupResponse,
   WorkspaceSummary,
@@ -8,6 +9,13 @@ import type {
 import { getSupabaseClient } from './supabaseClient';
 
 const WORKSPACE_CACHE_TTL_MS = 5 * 60 * 1000;
+const ALLOWED_CRM_TYPES: CRMType[] = [
+  'real-estate',
+  'gas-station',
+  'convenience-store',
+  'restaurant',
+  'auto-repair',
+];
 
 interface WorkspaceCacheEntry {
   fetchedAt: number;
@@ -21,6 +29,10 @@ function getAuthHeaders(session: Session) {
   return {
     Authorization: `Bearer ${session.access_token}`,
   };
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function isWorkspaceCacheFresh(entry: WorkspaceCacheEntry | undefined) {
@@ -51,6 +63,47 @@ export function primeUserWorkspaceCache(userId: string, workspace: WorkspaceSumm
   });
 }
 
+export function getPendingSignupPayloadFromUser(user: { user_metadata?: Record<string, unknown> | null } | null | undefined) {
+  const metadata = user?.user_metadata ?? {};
+  const fullName = normalizeString(metadata.full_name) || normalizeString(metadata.name);
+  const workspaceName = normalizeString(metadata.pending_workspace_name);
+  const workspaceSlug = normalizeString(metadata.pending_workspace_slug).toLowerCase();
+  const crmType = normalizeString(metadata.pending_crm_type) as CRMType;
+
+  if (!fullName || !workspaceName || !workspaceSlug || !ALLOWED_CRM_TYPES.includes(crmType)) {
+    return null;
+  }
+
+  return {
+    full_name: fullName,
+    workspace_name: workspaceName,
+    workspace_slug: workspaceSlug,
+    crm_type: crmType,
+  } satisfies CompleteSignupPayload;
+}
+
+export async function clearPendingSignupMetadata() {
+  const client = getSupabaseClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+
+  if (!user) {
+    return;
+  }
+
+  const metadata = {
+    ...(user.user_metadata ?? {}),
+    pending_workspace_name: null,
+    pending_workspace_slug: null,
+    pending_crm_type: null,
+  };
+
+  await client.auth.updateUser({
+    data: metadata,
+  });
+}
+
 export async function completeSignup(payload: CompleteSignupPayload, session: Session) {
   const client = getSupabaseClient();
   const { data, error } = await client.functions.invoke<CompleteSignupResponse>('complete-signup', {
@@ -68,6 +121,27 @@ export async function completeSignup(payload: CompleteSignupPayload, session: Se
 
   primeUserWorkspaceCache(session.user.id, data.workspace);
   return data.workspace;
+}
+
+export async function completePendingSignupIfAvailable(
+  session: Session,
+  user: { user_metadata?: Record<string, unknown> | null } | null | undefined = session.user,
+) {
+  const payload = getPendingSignupPayloadFromUser(user);
+
+  if (!payload) {
+    return null;
+  }
+
+  const workspace = await completeSignup(payload, session);
+
+  try {
+    await clearPendingSignupMetadata();
+  } catch {
+    // Metadata cleanup is best-effort and should not block access.
+  }
+
+  return workspace;
 }
 
 export async function fetchUserWorkspace(session: Session) {

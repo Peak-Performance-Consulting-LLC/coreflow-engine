@@ -61,6 +61,24 @@ function upsertInviteList(current: WorkspaceTeamInvite[], nextInvite: WorkspaceT
   return next;
 }
 
+async function copyInviteLinkWithFallback(inviteLink: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(inviteLink);
+      return true;
+    }
+  } catch {
+    // Fall through to prompt fallback.
+  }
+
+  if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+    window.prompt('Copy this secure invite link:', inviteLink);
+    return true;
+  }
+
+  return false;
+}
+
 export function TeamPage() {
   const navigate = useNavigate();
   const { session, workspace, signOut } = useAuth();
@@ -140,9 +158,13 @@ export function TeamPage() {
       }
 
       if (response.email_delivery?.status === 'failed') {
-        if (response.invite_link && navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(response.invite_link);
-          toast.error(`${response.email_delivery.message || 'Invite email could not be sent.'} Secure invite link copied instead.`);
+        if (response.invite_link) {
+          const copied = await copyInviteLinkWithFallback(response.invite_link);
+          if (copied) {
+            toast.error(`${response.email_delivery.message || 'Invite email could not be sent.'} Secure invite link copied instead.`);
+          } else {
+            toast.error(`${response.email_delivery.message || 'Invite email could not be sent.'} Share the secure invite link manually.`);
+          }
           return;
         }
 
@@ -176,9 +198,13 @@ export function TeamPage() {
       }
 
       if (response.email_delivery?.status === 'failed') {
-        if (response.invite_link && navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(response.invite_link);
-          toast.error(`${response.email_delivery.message || 'Invite email could not be resent.'} Secure invite link copied instead.`);
+        if (response.invite_link) {
+          const copied = await copyInviteLinkWithFallback(response.invite_link);
+          if (copied) {
+            toast.error(`${response.email_delivery.message || 'Invite email could not be resent.'} Secure invite link copied instead.`);
+          } else {
+            toast.error(`${response.email_delivery.message || 'Invite email could not be resent.'} Share the secure invite link manually.`);
+          }
           return;
         }
 
