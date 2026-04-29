@@ -15,7 +15,6 @@ import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
 import { isWorkspaceOwner } from '../lib/utils';
 import {
-  createVoiceTaskFromRecommendation,
   getVoiceCallDetail,
   listVoiceCalls,
   resolveVoiceReview,
@@ -47,7 +46,6 @@ export function VoiceOpsPage() {
   const [retryingLead, setRetryingLead] = useState(false);
   const [retryingActionId, setRetryingActionId] = useState<string | null>(null);
   const [resolvingReview, setResolvingReview] = useState(false);
-  const [creatingTaskArtifactId, setCreatingTaskArtifactId] = useState<string | null>(null);
 
   const openReviewCount = useMemo(
     () => (listData?.calls ?? []).filter((call) => call.review_status === 'open').length,
@@ -248,30 +246,6 @@ export function VoiceOpsPage() {
     }
   }
 
-  async function handleCreateTaskFromRecommendation(artifactId: string) {
-    if (!session || !workspace || !selectedCallId || !artifactId) {
-      return;
-    }
-
-    setCreatingTaskArtifactId(artifactId);
-
-    try {
-      const task = await createVoiceTaskFromRecommendation(session, {
-        workspace_id: workspace.id,
-        voice_call_id: selectedCallId,
-        artifact_id: artifactId,
-      });
-      toast.success(`Task created: ${task.title}`);
-      await loadCalls({ nextSelectedCallId: selectedCallId });
-      await loadDetail(selectedCallId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create task.';
-      toast.error(message);
-    } finally {
-      setCreatingTaskArtifactId(null);
-    }
-  }
-
   if (!session || !workspace) {
     return <FullPageLoader label="Loading voice operations..." />;
   }
@@ -388,12 +362,10 @@ export function VoiceOpsPage() {
         retryingLead={retryingLead}
         retryingActionId={retryingActionId}
         resolvingReview={resolvingReview}
-        creatingTaskArtifactId={creatingTaskArtifactId}
         onClose={() => setSelectedCallId(null)}
         onRetryLeadCreate={handleRetryLeadCreate}
         onRetryAction={handleRetryAction}
         onResolveReview={handleResolveReview}
-        onCreateTaskFromRecommendation={handleCreateTaskFromRecommendation}
       />
     </WorkspaceLayout>
   );

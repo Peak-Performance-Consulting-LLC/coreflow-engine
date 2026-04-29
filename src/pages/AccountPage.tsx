@@ -251,6 +251,15 @@ function arePreferencesEqual(left: AccountPreferences, right: AccountPreferences
   );
 }
 
+function hasConfiguredWorkspaceEmailSender(
+  senders: Array<{
+    status: 'pending' | 'connected' | 'failed' | 'disabled';
+    is_active: boolean;
+  }>,
+) {
+  return senders.some((sender) => sender.is_active && sender.status === 'connected');
+}
+
 function getProfileDisplayName(fullName: string, email: string | null | undefined) {
   const trimmedName = fullName.trim();
   if (trimmedName) return trimmedName;
@@ -819,6 +828,9 @@ export function AccountPage() {
   const preferencesDirty = !arePreferencesEqual(preferences, savedPreferences);
 
   const profileRole = formatRole(settings?.workspace.role);
+  const workspaceEmailConfigured = settings
+    ? hasConfiguredWorkspaceEmailSender(settings.senders)
+    : false;
   const displayName = getProfileDisplayName(profileName, settings?.profile.email);
   const businessTypeLabel =
     crmOptions.find((option) => option.value === workspaceCrmType)?.label ?? formatCrmLabel(workspaceCrmType);
@@ -1010,6 +1022,40 @@ export function AccountPage() {
               This workspace is read-only for your role.
             </div>
           ) : null}
+        </SectionCard>
+
+        <SectionCard
+          title="Invite email setup"
+          description="Owner email sender configuration used for team invite emails."
+          action={
+            <StatusBadge
+              label={workspaceEmailConfigured ? 'Configured' : 'Not configured'}
+              tone={workspaceEmailConfigured ? 'green' : 'amber'}
+            />
+          }
+        >
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm leading-6 text-slate-700">
+              {workspaceEmailConfigured
+                ? 'Workspace email sender is configured. Team invite emails can be delivered normally.'
+                : canManageWorkspace
+                  ? 'Configure workspace email before sending team invites.'
+                  : 'Only workspace owners can configure workspace email for invites.'}
+            </p>
+
+            {!workspaceEmailConfigured ? (
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigate('/email')}
+                  disabled={!canManageWorkspace}
+                >
+                  Configure email first
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </SectionCard>
 
         <div className="grid gap-4 md:grid-cols-3">

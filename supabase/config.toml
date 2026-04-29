@@ -60,6 +60,10 @@ verify_jwt = false
 verify_jwt = false
 [functions.records-config]
 verify_jwt = false
+[functions.records-custom-fields-list]
+verify_jwt = false
+[functions.records-custom-fields-update]
+verify_jwt = false
 [functions.records-list]
 verify_jwt = false
 [functions.telnyx-voice-webhook]

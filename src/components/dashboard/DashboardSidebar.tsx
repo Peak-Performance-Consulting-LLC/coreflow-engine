@@ -1,6 +1,7 @@
 import {
   ArrowDownToLine,
   Bot,
+  ClipboardList,
   LayoutGrid,
   ListChecks,
   Mail,
@@ -29,6 +30,7 @@ export function DashboardSidebar({ workspace }: { workspace: WorkspaceSummary })
   const workspaceItems: SidebarNavItem[] = [
     { label: 'Overview', icon: LayoutGrid, to: `/dashboard/${workspace.crmType}`, end: true },
     { label: 'Records', icon: Rows3, to: '/records' },
+    ...(isOwner ? [{ label: 'Form Builder', icon: ClipboardList, to: '/records/form-builder', end: true }] : []),
     { label: 'Imports', icon: ArrowDownToLine, to: '/imports' },
     { label: 'Email', icon: Mail, to: '/email', end: true },
     ...(isOwner ? [{ label: 'Team', icon: Users, to: '/team', end: true }] : []),

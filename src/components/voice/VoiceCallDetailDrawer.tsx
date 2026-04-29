@@ -5,7 +5,6 @@ import type { VoiceCallDetailResponse } from '../../lib/voice-ops-service';
 import { Button } from '../ui/Button';
 import { VoiceCallActionsPanel } from './VoiceCallActionsPanel';
 import { VoiceCallArtifactsPanel } from './VoiceCallArtifactsPanel';
-import { VoiceCallEventTimeline } from './VoiceCallEventTimeline';
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -51,12 +50,10 @@ interface VoiceCallDetailDrawerProps {
   retryingLead: boolean;
   retryingActionId: string | null;
   resolvingReview: boolean;
-  creatingTaskArtifactId: string | null;
   onClose: () => void;
   onRetryLeadCreate: () => Promise<void> | void;
   onRetryAction: (actionRunId: string) => Promise<void> | void;
   onResolveReview: (reviewStatus: 'open' | 'resolved' | 'dismissed') => Promise<void> | void;
-  onCreateTaskFromRecommendation: (artifactId: string) => Promise<void> | void;
 }
 
 export function VoiceCallDetailDrawer({
@@ -66,12 +63,10 @@ export function VoiceCallDetailDrawer({
   retryingLead,
   retryingActionId,
   resolvingReview,
-  creatingTaskArtifactId,
   onClose,
   onRetryLeadCreate,
   onRetryAction,
   onResolveReview,
-  onCreateTaskFromRecommendation,
 }: VoiceCallDetailDrawerProps) {
   useEffect(() => {
     if (!isOpen) {
@@ -189,12 +184,7 @@ export function VoiceCallDetailDrawer({
                 onResolveReview={onResolveReview}
               />
 
-              <VoiceCallArtifactsPanel
-                call={detail.call}
-                artifacts={detail.artifacts}
-                creatingTaskArtifactId={creatingTaskArtifactId}
-                onCreateTaskFromRecommendation={onCreateTaskFromRecommendation}
-              />
+              <VoiceCallArtifactsPanel call={detail.call} />
 
               <section className="rounded-3xl border border-slate-300 bg-white p-4">
                 <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Processing jobs</div>
@@ -222,7 +212,6 @@ export function VoiceCallDetailDrawer({
                   ))}
                 </div>
               </section>
-              <VoiceCallEventTimeline events={detail.events} />
             </div>
           )}
         </div>

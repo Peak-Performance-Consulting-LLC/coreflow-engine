@@ -12,6 +12,7 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { RecordsPage } from '../pages/RecordsPage';
 import { RecordCreatePage } from '../pages/RecordCreatePage';
 import { RecordDetailPage } from '../pages/RecordDetailPage';
+import { RecordFormBuilderPage } from '../pages/RecordFormBuilderPage';
 import { ImportsPage } from '../pages/ImportsPage';
 import { VoiceOpsPage } from '../pages/VoiceOpsPage';
 import { VoiceNumbersPage } from '../pages/VoiceNumbersPage';
@@ -82,6 +83,7 @@ export function AppRoutes() {
         <Route element={<CrmWorkspaceRoute />}>
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/records/new" element={<RecordCreatePage />} />
+          <Route path="/records/form-builder" element={<RecordFormBuilderPage />} />
           <Route path="/records/:recordId" element={<RecordDetailPage />} />
           <Route path="/imports" element={<ImportsPage />} />
           <Route path="/account" element={<AccountPage />} />

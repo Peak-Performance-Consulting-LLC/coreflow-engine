@@ -517,7 +517,7 @@ export async function generateVoiceCallSummaryArtifacts(params: {
       voiceCallId,
       errorText: 'Insufficient transcript data to generate AI summary.',
     });
-    return;
+    throw new Error('Insufficient transcript data to generate AI summary.');
   }
 
   const geminiApiKey = getString(Deno.env.get('GEMINI_API_KEY')) || getString(Deno.env.get('GOOGLE_API_KEY'));
@@ -529,7 +529,7 @@ export async function generateVoiceCallSummaryArtifacts(params: {
       voiceCallId,
       errorText: 'Gemini summary generation is not configured.',
     });
-    return;
+    throw new Error('Gemini summary generation is not configured.');
   }
 
   const model = getString(Deno.env.get('VOICE_CALL_SUMMARY_MODEL')) || DEFAULT_SUMMARY_MODEL;

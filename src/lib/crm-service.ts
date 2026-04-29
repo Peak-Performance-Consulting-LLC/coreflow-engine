@@ -1,6 +1,8 @@
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from './supabaseClient';
 import type {
+  CustomFieldDefinitionInput,
+  CustomFieldDefinition,
   CrmWorkspaceConfig,
   ImportJobInput,
   ImportJobResult,
@@ -185,6 +187,32 @@ export async function refreshCrmWorkspaceConfig(session: Session, workspaceId: s
   });
 
   return request;
+}
+
+export async function updateWorkspaceCustomFields(
+  session: Session,
+  workspaceId: string,
+  customFields: CustomFieldDefinitionInput[],
+) {
+  const nextConfig = await invoke<CrmWorkspaceConfig>('records-custom-fields-update', session, {
+    workspace_id: workspaceId,
+    custom_fields: customFields,
+  });
+
+  configCache.set(workspaceId, {
+    data: nextConfig,
+    fetchedAt: Date.now(),
+  });
+
+  return nextConfig;
+}
+
+export async function fetchWorkspaceCustomFields(session: Session, workspaceId: string) {
+  const response = await invoke<{ fields: CustomFieldDefinition[] }>('records-custom-fields-list', session, {
+    workspace_id: workspaceId,
+  });
+
+  return response.fields ?? [];
 }
 
 export function getCachedWorkspaceRecords(filters: RecordListQuery) {

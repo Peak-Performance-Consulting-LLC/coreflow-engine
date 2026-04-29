@@ -14,6 +14,7 @@ import { Input } from '../ui/Input';
 
 const rememberedEmailKey = 'coreflow.remembered-email';
 const existingUserSignedOutFlagKey = 'coreflow.existing-user-signed-out';
+const dashboardSetupPopupWorkspaceIdKey = 'coreflow.dashboard.setup-popup-workspace-id';
 type SignInRouteState = { prefillEmail?: string; existingUser?: boolean } | null;
 
 export function SignInForm() {
@@ -115,6 +116,9 @@ export function SignInForm() {
       }
 
       if (workspace) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(dashboardSetupPopupWorkspaceIdKey, workspace.id);
+        }
         toast.success('Welcome back to CoreFlow.');
         navigate(getDashboardPath(workspace), { replace: true });
         return;
@@ -123,6 +127,9 @@ export function SignInForm() {
       const pendingWorkspace = await completePendingSignupIfAvailable(data.session, data.user);
       if (pendingWorkspace) {
         await refreshWorkspace(data.session);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(dashboardSetupPopupWorkspaceIdKey, pendingWorkspace.id);
+        }
         toast.success('Workspace created. Welcome to CoreFlow.');
         navigate(getDashboardPath(pendingWorkspace), { replace: true });
         return;

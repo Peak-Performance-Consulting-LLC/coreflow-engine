@@ -16,6 +16,7 @@ import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
 import { isWorkspaceOwner } from '../lib/utils';
+import { getAccountSettings } from '../lib/account-service';
 import {
   getWorkspaceTeam,
   inviteWorkspaceAgent,
@@ -24,6 +25,15 @@ import {
   type WorkspaceTeamInvite,
   type WorkspaceTeamMember,
 } from '../lib/team-service';
+
+function hasConfiguredWorkspaceEmailSender(
+  senders: Array<{
+    status: 'pending' | 'connected' | 'failed' | 'disabled';
+    is_active: boolean;
+  }>,
+) {
+  return senders.some((sender) => sender.is_active && sender.status === 'connected');
+}
 
 function formatShortDate(value: string) {
   const parsed = new Date(value);
@@ -89,6 +99,8 @@ export function TeamPage() {
   const [email, setEmail] = useState('');
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [removingKey, setRemovingKey] = useState<string | null>(null);
+  const [ownerEmailConfigured, setOwnerEmailConfigured] = useState<boolean>(true);
+  const [showEmailConfigModal, setShowEmailConfigModal] = useState(false);
 
   const isOwner = isWorkspaceOwner(workspace);
 
@@ -120,6 +132,13 @@ export function TeamPage() {
       const response = await getWorkspaceTeam(session, workspace.id);
       setMembers(response.members);
       setInvites(response.invites);
+
+      try {
+        const accountSettings = await getAccountSettings(session, workspace.id);
+        setOwnerEmailConfigured(hasConfiguredWorkspaceEmailSender(accountSettings.senders));
+      } catch {
+        setOwnerEmailConfigured(true);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load workspace team.';
       toast.error(message);
@@ -141,6 +160,11 @@ export function TeamPage() {
 
     if (!email.trim()) {
       toast.error('Enter the email address you want to invite.');
+      return;
+    }
+
+    if (!ownerEmailConfigured) {
+      setShowEmailConfigModal(true);
       return;
     }
 
@@ -183,6 +207,11 @@ export function TeamPage() {
 
   async function handleResendInvite(invite: WorkspaceTeamInvite) {
     if (!session || !workspace) {
+      return;
+    }
+
+    if (!ownerEmailConfigured) {
+      setShowEmailConfigModal(true);
       return;
     }
 
@@ -582,12 +611,51 @@ export function TeamPage() {
               </Button>
             </form>
 
-            <div className="mt-6 rounded-xl bg-indigo-50 px-4 py-4 text-xs leading-5 text-indigo-700">
-              New agents receive a confirmation email with a secure link to set their password and join the workspace.
-            </div>
+            {ownerEmailConfigured ? (
+              <div className="mt-6 rounded-xl bg-indigo-50 px-4 py-4 text-xs leading-5 text-indigo-700">
+                New agents receive a confirmation email with a secure link to set their password and join the workspace.
+              </div>
+            ) : (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-xs leading-5 text-amber-800">
+                Configure workspace email first before sending invites.
+                <button
+                  type="button"
+                  className="ml-1 font-semibold underline underline-offset-2"
+                  onClick={() => setShowEmailConfigModal(true)}
+                >
+                  Open email configuration
+                </button>
+                .
+              </div>
+            )}
           </Card>
         </div>
       </div>
+
+      {showEmailConfigModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-slate-950">Configure workspace email first</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Invite emails are disabled until the workspace owner configures an email sender.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setShowEmailConfigModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowEmailConfigModal(false);
+                  navigate('/email');
+                }}
+              >
+                Configure email
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </WorkspaceLayout>
   );
 }

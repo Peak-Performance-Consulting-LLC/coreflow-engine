@@ -53,7 +53,7 @@ export function VoiceCallActionsPanel({
               <div>
                 <div className="font-medium text-slate-900">{run.action_type}</div>
                 <div className="mt-1 text-xs text-slate-500">
-                  {run.status} • attempts {run.attempt_count}
+                  {run.status} â€¢ attempts {run.attempt_count}
                 </div>
               </div>
               <Button

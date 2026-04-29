@@ -25,7 +25,7 @@ import {
 } from '../lib/crm-service';
 import type { RecordListFilters, RecordListPageResult, RecordListQuery, RecordSummary } from '../lib/crm-types';
 import { buildActiveFilterChips, buildOperationalMetrics } from '../lib/record-workbench';
-import { formatCrmLabel } from '../lib/utils';
+import { formatCrmLabel, isWorkspaceOwner } from '../lib/utils';
 
 const defaultFilters: Omit<RecordListFilters, 'workspace_id'> = {
   search: '',
@@ -103,6 +103,7 @@ export function RecordsPage() {
   const [activeActionMode, setActiveActionMode] = useState<RecordQuickActionMode>(null);
   const [loading, setLoading] = useState(() => recordPage.items.length === 0 && recordPage.total === 0);
   const [refreshing, setRefreshing] = useState(false);
+  const isOwner = isWorkspaceOwner(workspace);
   const requestIdRef = useRef(0);
   const filtersRef = useRef(filters);
   const paginationRef = useRef({ page: defaultPage, pageSize: defaultPageSize });
@@ -487,6 +488,11 @@ export function RecordsPage() {
               <Link to="/imports" className={buttonStyles('secondary', 'sm')} data-guide-id="records-import-button">
                 Import records
               </Link>
+              {isOwner ? (
+                <Link to="/records/form-builder" className={buttonStyles('secondary', 'sm')}>
+                  Form Builder
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={handleOpenCreateDrawer}

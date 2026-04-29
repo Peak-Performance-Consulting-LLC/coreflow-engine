@@ -12,6 +12,25 @@ function normalizeOptions(definition: CustomFieldDefinition) {
   return Array.isArray(definition.options) ? definition.options : [];
 }
 
+function normalizeInputValue(definition: CustomFieldDefinition, value: unknown) {
+  if (definition.field_type === 'datetime') {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return '';
+    }
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
 function FieldLabel({ definition }: { definition: CustomFieldDefinition }) {
   return (
     <span className="flex items-center gap-2 font-medium">
@@ -138,8 +157,16 @@ export function FieldRenderer({ definition, value, error, onChange }: FieldRende
     <label className="flex w-full flex-col gap-2 text-sm text-slate-700">
       <FieldLabel definition={definition} />
       <input
-        type={definition.field_type === 'number' ? 'number' : definition.field_type === 'date' ? 'date' : 'text'}
-        value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+        type={
+          definition.field_type === 'number'
+            ? 'number'
+            : definition.field_type === 'date'
+              ? 'date'
+              : definition.field_type === 'datetime'
+                ? 'datetime-local'
+                : 'text'
+        }
+        value={normalizeInputValue(definition, value)}
         onChange={(event) => onChange(event.target.value)}
         placeholder={definition.placeholder ?? ''}
         className={cn(

@@ -1,7 +1,7 @@
 import type { EdgeClient } from './server.ts';
 import { resolveWorkspaceVoiceActorUserId } from './server.ts';
 import { generateVoiceCallSummaryArtifacts } from './voice-call-summary.ts';
-import { findVoiceCallById } from './voice-repository.ts';
+import { findVoiceCallById, listVoiceCallArtifactsByVoiceCallId } from './voice-repository.ts';
 import {
   findVoiceProcessingJobById,
   type VoiceProcessingJobRow,
@@ -42,6 +42,8 @@ function nextRetryIso(attemptCount: number) {
   return new Date(Date.now() + computeRetryDelayMs(attemptCount)).toISOString();
 }
 
+const SUMMARY_ARTIFACT_TYPES = ['summary', 'disposition', 'follow_up_recommendation'] as const;
+
 async function processJobBody(
   db: EdgeClient,
   job: VoiceProcessingJobRow,
@@ -80,12 +82,49 @@ async function processJobBody(
     }
 
     const call = await findVoiceCallById(db, job.workspace_id, job.voice_call_id);
+    try {
+      await generateVoiceCallSummaryArtifacts({
+        db,
+        workspaceId: job.workspace_id,
+        call,
+      });
+    } catch (error) {
+      const errorMessage = safeErrorMessage(error);
+      return {
+        outcome: 'retry',
+        availableAt: nextRetryIso(job.attempt_count),
+        errorMessage,
+        resultPayload: {
+          voice_call_id: call.id,
+          summary_generated: false,
+          error: errorMessage,
+        },
+      };
+    }
 
-    await generateVoiceCallSummaryArtifacts({
+    const artifacts = await listVoiceCallArtifactsByVoiceCallId(
       db,
-      workspaceId: job.workspace_id,
-      call,
-    });
+      job.workspace_id,
+      call.id,
+    );
+    const failedArtifacts = artifacts.filter((artifact) =>
+      SUMMARY_ARTIFACT_TYPES.includes(
+        artifact.artifact_type as (typeof SUMMARY_ARTIFACT_TYPES)[number],
+      ) && artifact.status === 'failed'
+    );
+
+    if (failedArtifacts.length > 0) {
+      return {
+        outcome: 'retry',
+        availableAt: nextRetryIso(job.attempt_count),
+        errorMessage: failedArtifacts[0].error_text ?? 'Summary artifacts are still marked failed.',
+        resultPayload: {
+          voice_call_id: call.id,
+          summary_generated: false,
+          failed_artifact_count: failedArtifacts.length,
+        },
+      };
+    }
 
     return {
       outcome: 'completed',

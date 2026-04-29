@@ -44,6 +44,7 @@ interface CustomFieldDefinitionRow {
   label: string;
   field_type: string;
   is_required: boolean;
+  is_active: boolean;
   options: unknown;
   placeholder: string | null;
   help_text: string | null;
@@ -201,7 +202,7 @@ async function getFieldDefinitions(serviceClient: EdgeClient, workspaceId: strin
   const { data, error } = await serviceClient
     .from('custom_field_definitions')
     .select(
-      'id, field_key, label, field_type, is_required, options, placeholder, help_text, validation_rules, default_value, position',
+      'id, field_key, label, field_type, is_required, is_active, options, placeholder, help_text, validation_rules, default_value, position',
     )
     .eq('workspace_id', workspaceId)
     .eq('entity_type', 'record')

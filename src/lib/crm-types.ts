@@ -1,6 +1,14 @@
 import type { CRMType, WorkspaceRole } from './types';
 
-export type CustomFieldType = 'text' | 'textarea' | 'number' | 'date' | 'boolean' | 'select' | 'multi_select';
+export type CustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'boolean'
+  | 'select'
+  | 'multi_select';
 
 export interface CrmStage {
   id: string;
@@ -38,12 +46,28 @@ export interface CustomFieldDefinition {
   label: string;
   field_type: CustomFieldType;
   is_required: boolean;
+  is_active: boolean;
+  is_system?: boolean;
   options: string[] | null;
   placeholder: string | null;
   help_text: string | null;
   validation_rules: Record<string, unknown>;
   default_value: unknown;
   position: number;
+}
+
+export interface CustomFieldDefinitionInput {
+  id?: string;
+  field_key: string;
+  label: string;
+  field_type: CustomFieldType;
+  is_required: boolean;
+  is_active?: boolean;
+  options: string[] | null;
+  placeholder: string | null;
+  help_text: string | null;
+  validation_rules: Record<string, unknown>;
+  default_value: unknown;
 }
 
 export interface CrmWorkspaceConfig {
