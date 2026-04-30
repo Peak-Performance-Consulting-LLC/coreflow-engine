@@ -263,7 +263,7 @@ function DashboardCardFrame({
   const accent = getAccentClasses(icon);
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-[20px] border border-[#d8dde6] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
+    <article className="flex h-[460px] flex-col overflow-hidden rounded-[20px] border border-[#d8dde6] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
       <div className="flex items-center gap-3 px-4 pb-3 pt-4">
         <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', accent.iconWrap)}>
           <Icon className="h-4 w-4" />
@@ -291,7 +291,7 @@ function DashboardCardFrame({
         </div>
       </div>
 
-      <div className="flex-1 px-4 pb-5">{children}</div>
+      <div className="flex-1 overflow-y-auto px-4 pb-5">{children}</div>
 
       <div className="mt-auto flex items-center justify-between border-t border-[#e5e7eb] px-4 py-3 text-xs text-slate-500">
         <Link to={footerTo} className="font-medium text-[#0176d3] transition hover:text-[#014486]">
@@ -384,7 +384,7 @@ function EmptyStateIllustration({ variant }: { variant: 'records' | 'queue' }) {
 
 function ListCardEmpty({ message, variant }: { message: string; variant: 'records' | 'queue' }) {
   return (
-    <div className="flex min-h-[360px] flex-col items-center justify-center px-5 text-center xl:min-h-[420px]">
+    <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
       <EmptyStateIllustration variant={variant} />
       <p className="mt-3 text-sm text-slate-500">{message}</p>
     </div>
