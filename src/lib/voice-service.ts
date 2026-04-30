@@ -144,6 +144,11 @@ function invalidateVoiceNumbersCache(workspaceId: string) {
   }
 }
 
+export function getCachedVoiceNumbers(workspaceId: string, includeInactive = true) {
+  const cacheKey = createVoiceNumbersCacheKey(workspaceId, includeInactive);
+  return voiceNumbersCache.get(cacheKey)?.data ?? null;
+}
+
 export async function listVoiceNumbers(session: Session, workspaceId: string, includeInactive = true) {
   const cacheKey = createVoiceNumbersCacheKey(workspaceId, includeInactive);
   const cachedEntry = voiceNumbersCache.get(cacheKey);

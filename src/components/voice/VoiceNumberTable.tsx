@@ -16,30 +16,30 @@ interface VoiceNumberTableProps {
 
 function getProvisioningBadge(number: VoiceNumberRecord) {
   if (number.provisioning_status === 'active') {
-    return 'border-indigo-300 bg-[#EEF2FF] text-slate-700';
+    return 'border-indigo-200 bg-indigo-50 text-indigo-700';
   }
 
   if (number.provisioning_status === 'pending') {
-    return 'border-indigo-200 bg-[#EEF2FF] text-slate-700';
+    return 'border-amber-200 bg-amber-50 text-amber-700';
   }
 
   if (number.provisioning_status === 'failed') {
     return 'border-rose-200 bg-rose-50 text-rose-700';
   }
 
-  return 'border-slate-300/10 bg-slate-50 text-slate-700';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
 function getWebhookBadge(number: VoiceNumberRecord) {
   if (number.webhook_status === 'ready') {
-    return 'border-indigo-200 bg-[#EEF2FF] text-slate-700';
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   }
 
   if (number.webhook_status === 'failed') {
     return 'border-rose-200 bg-rose-50 text-rose-700';
   }
 
-  return 'border-indigo-200 bg-[#EEF2FF] text-slate-700';
+  return 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
 export function VoiceNumberTable({
@@ -72,16 +72,17 @@ export function VoiceNumberTable({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <div className="border-b border-slate-300 px-6 py-5">
+    <Card className="overflow-hidden border border-slate-200/90 bg-white shadow-[0_20px_42px_-32px_rgba(15,23,42,0.6)]">
+      <div className="border-b border-slate-200 px-6 py-5">
         <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Provisioned numbers</div>
         <h3 className="mt-2 font-display text-2xl text-slate-900">Workspace voice inventory</h3>
+        <p className="mt-1 text-sm text-slate-500">Manage labels, routing readiness, and live status for every workspace line.</p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-0 text-sm text-slate-700">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+            <tr className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.24em] text-slate-500">
               <th className="px-6 py-4">Number</th>
               <th className="px-6 py-4">Label</th>
               <th className="px-6 py-4">Provisioning</th>
@@ -103,9 +104,9 @@ export function VoiceNumberTable({
               const needsReconcile = number.provisioning_status !== 'active' || number.webhook_status !== 'ready';
 
               return (
-                <tr key={number.id} className="border-t border-slate-300">
+                <tr key={number.id} className="border-t border-slate-200 align-top transition-colors hover:bg-slate-50/60">
                   <td className="px-6 py-5 align-top">
-                    <div className="font-semibold text-slate-900">{number.phone_number_e164}</div>
+                    <div className="font-display text-[28px] font-semibold leading-none text-slate-900">{number.phone_number_e164}</div>
                     <div className="mt-1 text-xs text-slate-500">Managed workspace line</div>
                     {number.last_provisioning_error ? (
                       <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-6 text-rose-700">
@@ -118,34 +119,34 @@ export function VoiceNumberTable({
                       value={draft.label}
                       onChange={(event) => onLabelChange(number.id, event.target.value)}
                       placeholder="Front desk line"
-                      className="h-11 w-full min-w-[220px] rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-500"
+                      className="h-11 w-full min-w-[220px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 placeholder:text-slate-500 transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
                     />
                   </td>
                   <td className="px-6 py-5 align-top">
                     <div
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${getProvisioningBadge(number)}`}
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${getProvisioningBadge(number)}`}
                     >
                       {number.provisioning_status}
                     </div>
                   </td>
                   <td className="px-6 py-5 align-top">
                     <div
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${getWebhookBadge(number)}`}
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${getWebhookBadge(number)}`}
                     >
                       {number.webhook_status}
                     </div>
                   </td>
                   <td className="px-6 py-5 align-top">
-                    <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3">
+                    <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_18px_-20px_rgba(15,23,42,0.45)]">
                       <input
                         type="checkbox"
                         checked={draft.is_active}
                         onChange={(event) => onActiveChange(number.id, event.target.checked)}
-                        className="h-4 w-4 rounded border-indigo-200 bg-white"
+                        className="h-4 w-4 rounded border-indigo-200 bg-white text-indigo-600"
                       />
                       <span className="text-sm text-slate-900">{draft.is_active ? 'Active' : 'Paused'}</span>
                       {draft.is_active ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                       ) : (
                         <CircleOff className="h-4 w-4 text-slate-500" />
                       )}
@@ -160,7 +161,7 @@ export function VoiceNumberTable({
                   <td className="px-6 py-5 align-top">
                     <div className="flex items-center justify-end gap-3">
                       {number.webhook_status !== 'ready' ? (
-                        <span className="inline-flex items-center gap-2 text-xs text-slate-700">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
                           <ShieldAlert className="h-4 w-4" />
                           Pending routing
                         </span>

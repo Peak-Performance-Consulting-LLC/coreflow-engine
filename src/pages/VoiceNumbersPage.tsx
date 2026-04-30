@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { PhoneIncoming, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,7 +13,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
 import { isWorkspaceOwner } from '../lib/utils';
 import type { VoiceNumberRecord } from '../lib/voice-service';
-import { listVoiceNumbers, reconcileVoiceNumber, updateVoiceNumber } from '../lib/voice-service';
+import { getCachedVoiceNumbers, listVoiceNumbers, reconcileVoiceNumber, updateVoiceNumber } from '../lib/voice-service';
 
 function createDraftMap(numbers: VoiceNumberRecord[]) {
   return Object.fromEntries(
@@ -30,12 +30,14 @@ function createDraftMap(numbers: VoiceNumberRecord[]) {
 export function VoiceNumbersPage() {
   const navigate = useNavigate();
   const { session, workspace, signOut } = useAuth();
-  const [numbers, setNumbers] = useState<VoiceNumberRecord[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, { label: string; is_active: boolean }>>({});
-  const [numbersLoading, setNumbersLoading] = useState(true);
+  const cachedNumbers = workspace ? getCachedVoiceNumbers(workspace.id, true)?.numbers ?? [] : [];
+  const [numbers, setNumbers] = useState<VoiceNumberRecord[]>(cachedNumbers);
+  const [drafts, setDrafts] = useState<Record<string, { label: string; is_active: boolean }>>(() => createDraftMap(cachedNumbers));
+  const [numbersLoading, setNumbersLoading] = useState(!workspace || cachedNumbers.length === 0);
   const [numbersError, setNumbersError] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+  const numbersRequestIdRef = useRef(0);
 
   const isOwner = isWorkspaceOwner(workspace);
   const readyCount = numbers.filter((number) => number.webhook_status === 'ready').length;
@@ -80,25 +82,45 @@ export function VoiceNumbersPage() {
   }
 
   async function loadNumbers() {
+    const requestId = numbersRequestIdRef.current + 1;
+    numbersRequestIdRef.current = requestId;
+
     if (!session || !workspace || !isOwner) {
-      setNumbers([]);
-      setDrafts({});
-      setNumbersLoading(false);
+      if (numbersRequestIdRef.current === requestId) {
+        setNumbers([]);
+        setDrafts({});
+        setNumbersLoading(false);
+        setNumbersError('');
+      }
       return;
     }
 
-    setNumbersLoading(true);
-    setNumbersError('');
+    const cachedResponse = getCachedVoiceNumbers(workspace.id, true);
+
+    if (numbersRequestIdRef.current === requestId) {
+      if (cachedResponse?.numbers) {
+        setNumbers(cachedResponse.numbers);
+        setDrafts(createDraftMap(cachedResponse.numbers));
+      }
+      setNumbersLoading(!cachedResponse?.numbers?.length);
+      setNumbersError('');
+    }
 
     try {
       const response = await listVoiceNumbers(session, workspace.id, true);
-      setNumbers(response.numbers);
-      setDrafts(createDraftMap(response.numbers));
+      if (numbersRequestIdRef.current === requestId) {
+        setNumbers(response.numbers);
+        setDrafts(createDraftMap(response.numbers));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load voice numbers.';
-      setNumbersError(message);
+      if (numbersRequestIdRef.current === requestId) {
+        setNumbersError(message);
+      }
     } finally {
-      setNumbersLoading(false);
+      if (numbersRequestIdRef.current === requestId) {
+        setNumbersLoading(false);
+      }
     }
   }
 
@@ -218,19 +240,45 @@ export function VoiceNumbersPage() {
         />
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <PhoneIncoming className="h-4 w-4 text-indigo-500" />
-              Active numbers
+          <Card className="relative overflow-hidden border border-slate-200/90 bg-gradient-to-br from-white via-slate-50 to-indigo-50/45 p-5 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.55)]">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full bg-indigo-200/35 blur-2xl"
+            />
+            <div className="relative">
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600">
+                  <PhoneIncoming className="h-4 w-4" />
+                </span>
+                Active numbers
+              </div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="font-display text-3xl text-slate-900">{activeCount}</div>
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">
+                  live lines
+                </span>
+              </div>
             </div>
-            <div className="mt-2 font-display text-3xl text-slate-900">{activeCount}</div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <ShieldCheck className="h-4 w-4 text-indigo-500" />
-              Webhook ready
+          <Card className="relative overflow-hidden border border-slate-200/90 bg-gradient-to-br from-white via-slate-50 to-sky-50/45 p-5 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.55)]">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -left-8 -top-12 h-28 w-28 rounded-full bg-sky-200/35 blur-2xl"
+            />
+            <div className="relative">
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700">
+                  <ShieldCheck className="h-4 w-4" />
+                </span>
+                Webhook ready
+              </div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="font-display text-3xl text-slate-900">{readyCount}</div>
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  routing ok
+                </span>
+              </div>
             </div>
-            <div className="mt-2 font-display text-3xl text-slate-900">{readyCount}</div>
           </Card>
         </div>
 

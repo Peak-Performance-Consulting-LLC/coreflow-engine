@@ -83,11 +83,32 @@ export async function seedWorkspaceCrmConfig(serviceClient: EdgeClient, { worksp
     visibility_rules: {},
   }));
 
-  const { error: fieldError } = await serviceClient
+  const { data: existingFields, error: existingFieldsError } = await serviceClient
     .from('custom_field_definitions')
-    .upsert(fieldRows, { onConflict: 'workspace_id,entity_type,field_key' });
+    .select('field_key')
+    .eq('workspace_id', workspaceId)
+    .eq('entity_type', 'record');
 
-  if (fieldError) {
-    throw new Error(fieldError.message);
+  if (existingFieldsError) {
+    throw new Error(existingFieldsError.message);
+  }
+
+  const existingFieldKeys = new Set(
+    (existingFields ?? [])
+      .map((row) => (typeof row.field_key === 'string' ? row.field_key.trim() : ''))
+      .filter((value) => value.length > 0),
+  );
+  const missingFieldRows = fieldRows.filter((field) => !existingFieldKeys.has(field.field_key));
+
+  if (missingFieldRows.length === 0) {
+    return;
+  }
+
+  const { error: fieldInsertError } = await serviceClient
+    .from('custom_field_definitions')
+    .insert(missingFieldRows);
+
+  if (fieldInsertError) {
+    throw new Error(fieldInsertError.message);
   }
 }

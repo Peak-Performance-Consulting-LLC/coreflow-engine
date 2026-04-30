@@ -120,6 +120,11 @@ export function getCachedCrmWorkspaceConfig(workspaceId: string) {
   return configCache.get(workspaceId)?.data ?? null;
 }
 
+export function isCrmWorkspaceConfigCacheFresh(workspaceId: string) {
+  const entry = configCache.get(workspaceId);
+  return isCacheFresh(entry, CONFIG_CACHE_TTL_MS);
+}
+
 export async function fetchCrmWorkspaceConfig(session: Session, workspaceId: string) {
   const cachedEntry = configCache.get(workspaceId);
 

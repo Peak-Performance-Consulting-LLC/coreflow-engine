@@ -1,4 +1,4 @@
-import React from 'react';
+import { Fragment, StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -6,8 +6,10 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
+const AppRoot = import.meta.env.DEV ? Fragment : StrictMode;
+
 ReactDOM.createRoot(document.getElementById('app')!).render(
-  <React.StrictMode>
+  <AppRoot>
     <AuthProvider>
       <BrowserRouter>
         <App />
@@ -25,5 +27,5 @@ ReactDOM.createRoot(document.getElementById('app')!).render(
         />
       </BrowserRouter>
     </AuthProvider>
-  </React.StrictMode>,
+  </AppRoot>,
 );

@@ -167,6 +167,128 @@
     animation: setup-gradient-shift 7.5s ease-in-out infinite;
     border-color: rgba(129, 140, 248, 0.42);
   }
+
+  .voice-number-search-card {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background-image: linear-gradient(135deg, #ffffff 0%, #f8fafc 44%, #eef2ff 100%);
+    background-size: 180% 180%;
+    animation: setup-gradient-shift 16s ease-in-out infinite;
+  }
+
+  .voice-number-search-card::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    z-index: 0;
+    background:
+      radial-gradient(circle at 18% 20%, rgba(129, 140, 248, 0.22), transparent 36%),
+      radial-gradient(circle at 84% 16%, rgba(56, 189, 248, 0.22), transparent 32%),
+      radial-gradient(circle at 72% 80%, rgba(244, 114, 182, 0.14), transparent 30%);
+    animation: voice-card-pan 18s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .voice-number-search-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      linear-gradient(125deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0) 28%),
+      repeating-linear-gradient(
+        110deg,
+        rgba(99, 102, 241, 0.04) 0,
+        rgba(99, 102, 241, 0.04) 1px,
+        transparent 1px,
+        transparent 34px
+      );
+    opacity: 0.78;
+    pointer-events: none;
+  }
+
+  .voice-number-search-orb {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(42px);
+    opacity: 0.42;
+    pointer-events: none;
+    animation: voice-card-float 10s ease-in-out infinite;
+  }
+
+  .voice-number-search-orb-top {
+    right: -3.5rem;
+    top: -3rem;
+    height: 14rem;
+    width: 14rem;
+    background: radial-gradient(circle, rgba(129, 140, 248, 0.42), rgba(129, 140, 248, 0));
+  }
+
+  .voice-number-search-orb-bottom {
+    bottom: -4.5rem;
+    left: -4rem;
+    height: 15rem;
+    width: 15rem;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.36), rgba(56, 189, 248, 0));
+    animation-delay: -3.3s;
+  }
+
+  .voice-number-search-orb-mid {
+    right: 36%;
+    top: 44%;
+    height: 10rem;
+    width: 10rem;
+    background: radial-gradient(circle, rgba(244, 114, 182, 0.3), rgba(244, 114, 182, 0));
+    animation-delay: -6.1s;
+  }
+
+  .voice-call-detail-shell {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background-image: linear-gradient(135deg, #ffffff 0%, #f8fafc 42%, #eef2ff 100%);
+    background-size: 190% 190%;
+    animation: setup-gradient-shift 15s ease-in-out infinite;
+  }
+
+  .voice-call-detail-shell::before {
+    content: '';
+    position: absolute;
+    inset: -32% -24%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 10% 14%, rgba(56, 189, 248, 0.18), transparent 34%),
+      radial-gradient(circle at 88% 14%, rgba(129, 140, 248, 0.2), transparent 36%),
+      radial-gradient(circle at 72% 82%, rgba(244, 114, 182, 0.14), transparent 32%);
+    animation: voice-card-pan 17s ease-in-out infinite;
+  }
+
+  .voice-call-section {
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
+    box-shadow: 0 14px 28px -24px rgba(15, 23, 42, 0.5);
+  }
+
+  .voice-call-stat {
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.88));
+    box-shadow: 0 12px 26px -24px rgba(15, 23, 42, 0.48);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .voice-call-stat:hover {
+    transform: translateY(-1px);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 18px 30px -22px rgba(79, 70, 229, 0.24);
+  }
+
+  .voice-call-chip {
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    background: linear-gradient(130deg, rgba(224, 231, 255, 0.88), rgba(240, 249, 255, 0.92));
+    color: #3730a3;
+  }
 }
 
 @keyframes ai-cta-gradient-shift {
@@ -215,6 +337,44 @@
   100% {
     transform: translateX(320%) skewX(-22deg);
     opacity: 0;
+  }
+}
+
+@keyframes voice-card-pan {
+  0% {
+    transform: translate3d(-2%, -2%, 0) rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: translate3d(2%, 2%, 0) rotate(6deg) scale(1.06);
+  }
+
+  100% {
+    transform: translate3d(-2%, -2%, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes voice-card-float {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -10px, 0) scale(1.06);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-number-search-card,
+  .voice-number-search-card::before,
+  .voice-number-search-orb,
+  .voice-call-detail-shell,
+  .voice-call-detail-shell::before {
+    animation: none !important;
   }
 }
 

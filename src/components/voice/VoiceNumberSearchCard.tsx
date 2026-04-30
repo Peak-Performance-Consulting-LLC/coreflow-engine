@@ -366,10 +366,16 @@ export function VoiceNumberSearchCard({
   }
 
   return (
-    <Card className="p-6">
-      <div className="flex flex-col gap-6">
+    <Card className="voice-number-search-card border border-slate-200/80 p-6 shadow-[0_14px_40px_-22px_rgba(15,23,42,0.5)]">
+      <div aria-hidden="true" className="voice-number-search-orb voice-number-search-orb-top" />
+      <div aria-hidden="true" className="voice-number-search-orb voice-number-search-orb-bottom" />
+      <div aria-hidden="true" className="voice-number-search-orb voice-number-search-orb-mid" />
+
+      <div className="relative z-10 flex flex-col gap-6">
         <div>
-          <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Managed provisioning</div>
+          <div className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-700">
+            Managed provisioning
+          </div>
           <h3 className="mt-2 font-display text-2xl text-slate-900">Search available Numbers</h3>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
             Search CoreFlow-managed inventory and provision a workspace line without exposing raw Telnyx setup to the
@@ -388,14 +394,15 @@ export function VoiceNumberSearchCard({
           </Button>
         </div>
 
-        <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-6">
+        <div className="hidden gap-4 rounded-3xl border border-white/70 bg-white/75 p-4 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)] backdrop-blur md:grid md:grid-cols-2 md:items-start xl:grid-cols-6">
           {renderFilterFields()}
-          <div className="flex items-end xl:justify-end">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-slate-700">Search</span>
             <Button
               type="button"
               onClick={() => void onSearch()}
               loading={loading}
-              className="w-full xl:w-auto"
+              className="h-12 w-full px-6"
               data-guide-id="voice-number-search"
             >
               <Search className="h-4 w-4" />

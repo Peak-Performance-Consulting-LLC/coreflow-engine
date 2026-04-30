@@ -10,13 +10,14 @@ import { useAuth } from '../hooks/useAuth';
 import { usePageGuide } from '../hooks/useAppGuide';
 import { isWorkspaceOwner } from '../lib/utils';
 import type { VoiceNumberRecord } from '../lib/voice-service';
-import { listVoiceNumbers } from '../lib/voice-service';
+import { getCachedVoiceNumbers, listVoiceNumbers } from '../lib/voice-service';
 
 export function VoiceAssistantsPage() {
   const navigate = useNavigate();
   const { session, workspace, signOut } = useAuth();
-  const [numbers, setNumbers] = useState<VoiceNumberRecord[]>([]);
-  const [numbersLoading, setNumbersLoading] = useState(true);
+  const cachedNumbers = workspace ? getCachedVoiceNumbers(workspace.id, true)?.numbers ?? [] : [];
+  const [numbers, setNumbers] = useState<VoiceNumberRecord[]>(cachedNumbers);
+  const [numbersLoading, setNumbersLoading] = useState(!workspace || cachedNumbers.length === 0);
   const [numbersError, setNumbersError] = useState('');
   const numbersRequestIdRef = useRef(0);
 
@@ -74,7 +75,11 @@ export function VoiceAssistantsPage() {
     }
 
     if (numbersRequestIdRef.current === requestId) {
-      setNumbersLoading(true);
+      const cachedResponse = getCachedVoiceNumbers(workspace.id, true);
+      if (cachedResponse?.numbers) {
+        setNumbers(cachedResponse.numbers);
+      }
+      setNumbersLoading(!cachedResponse?.numbers?.length);
       setNumbersError('');
     }
 

@@ -202,7 +202,7 @@ function MessageRoleTag({ role, label }: { role: TimelineRole; label: string }) 
 
 function StatCard({ label, value, subtext }: { label: string; value: string; subtext?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+    <div className="voice-call-stat rounded-2xl px-4 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-1 text-sm font-semibold text-slate-950">{value}</div>
       {subtext ? <div className="mt-0.5 text-xs text-slate-500">{subtext}</div> : null}
@@ -215,10 +215,10 @@ export function VoiceCallArtifactsPanel({ call }: VoiceCallArtifactsPanelProps) 
   const durationLabel = formatDuration(call.answered_at ?? call.created_at, call.ended_at);
 
   return (
-    <Card className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-0 shadow-sm">
-      <div className="border-b border-slate-100 px-5 py-4">
+    <Card className="voice-call-section overflow-hidden rounded-3xl p-0">
+      <div className="border-b border-slate-200 px-5 py-4">
         <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-accent-blue">Artifacts</div>
-        <h3 className="mt-1 text-base font-semibold text-slate-950">Conversation timeline</h3>
+        <h3 className="mt-1 text-lg font-semibold text-slate-950">Conversation timeline</h3>
         <p className="mt-1 text-sm text-slate-500">Review the call timeline and key session details.</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -234,7 +234,7 @@ export function VoiceCallArtifactsPanel({ call }: VoiceCallArtifactsPanelProps) 
       </div>
 
       <div className="p-5">
-        <div className="max-h-[min(58vh,620px)] overflow-y-auto rounded-3xl border border-slate-200 bg-slate-50/60 p-4">
+        <div className="max-h-[min(58vh,620px)] overflow-y-auto rounded-3xl border border-slate-200 bg-white/75 p-4">
           {timelineMessages.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-600">
               No message history available for this call yet.

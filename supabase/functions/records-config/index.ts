@@ -33,10 +33,46 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: workspaceError?.message || 'Workspace not found.' }, 404);
     }
 
-    await seedWorkspaceCrmConfig(authContext.serviceClient, {
-      workspaceId,
-      crmType: workspace.crm_type,
-    });
+    const [pipelinesCountResult, sourcesCountResult, fieldsCountResult] = await Promise.all([
+      authContext.serviceClient
+        .from('pipelines')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId)
+        .eq('entity_type', 'record'),
+      authContext.serviceClient
+        .from('record_sources')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId),
+      authContext.serviceClient
+        .from('custom_field_definitions')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId)
+        .eq('entity_type', 'record'),
+    ]);
+
+    if (pipelinesCountResult.error) {
+      return jsonResponse({ error: pipelinesCountResult.error.message }, 400);
+    }
+
+    if (sourcesCountResult.error) {
+      return jsonResponse({ error: sourcesCountResult.error.message }, 400);
+    }
+
+    if (fieldsCountResult.error) {
+      return jsonResponse({ error: fieldsCountResult.error.message }, 400);
+    }
+
+    const isCrmConfigEmpty =
+      (pipelinesCountResult.count ?? 0) === 0 &&
+      (sourcesCountResult.count ?? 0) === 0 &&
+      (fieldsCountResult.count ?? 0) === 0;
+
+    if (isCrmConfigEmpty) {
+      await seedWorkspaceCrmConfig(authContext.serviceClient, {
+        workspaceId,
+        crmType: workspace.crm_type,
+      });
+    }
 
     const config = await getWorkspaceCrmConfig(authContext.serviceClient, workspaceId);
     return jsonResponse(config);

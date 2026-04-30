@@ -1,6 +1,7 @@
 import { Bell, Building2, ChevronDown, LogOut, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceSummary } from '../../lib/types';
+import { formatCrmLabel } from '../../lib/utils';
 
 interface DashboardTopbarProps {
   workspace: WorkspaceSummary;
@@ -8,6 +9,7 @@ interface DashboardTopbarProps {
 }
 
 export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) {
+  const workspaceModeLabel = formatCrmLabel(workspace.crmType);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const notifications = [
@@ -61,10 +63,13 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
       {/* Right actions */}
       <div className="flex items-center gap-2">
         {/* Workspace selector chip */}
-        <div className="flex cursor-default items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-sm font-medium text-slate-700">
-          <Building2 className="h-3.5 w-3.5 text-slate-400" />
+        <div className="flex cursor-default items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
+          <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
           <span>{workspace.name}</span>
-          <ChevronDown className="h-3 w-3 text-slate-400" />
+          <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-700">
+            {workspaceModeLabel}
+          </span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
         </div>
 
         {/* Bell */}

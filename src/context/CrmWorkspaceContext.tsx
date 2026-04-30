@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { fetchCrmWorkspaceConfig, getCachedCrmWorkspaceConfig, refreshCrmWorkspaceConfig } from '../lib/crm-service';
+import { fetchCrmWorkspaceConfig, getCachedCrmWorkspaceConfig, isCrmWorkspaceConfigCacheFresh, refreshCrmWorkspaceConfig } from '../lib/crm-service';
 import type { CrmWorkspaceConfig } from '../lib/crm-types';
 
 interface CrmWorkspaceContextValue {
@@ -80,17 +80,20 @@ export function CrmWorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     const cachedConfig = getCachedCrmWorkspaceConfig(workspaceId);
+    const shouldRefresh = !isCrmWorkspaceConfigCacheFresh(workspaceId);
     let cancelled = false;
 
     setConfig(cachedConfig);
     setConfigError(null);
     setConfigLoading(!cachedConfig);
-    setConfigRefreshing(Boolean(cachedConfig));
+    setConfigRefreshing(Boolean(cachedConfig) && shouldRefresh);
 
     void (async () => {
       try {
-        const nextConfig = cachedConfig
-          ? await refreshCrmWorkspaceConfig(session, workspaceId)
+        const nextConfig = shouldRefresh
+          ? cachedConfig
+            ? await refreshCrmWorkspaceConfig(session, workspaceId)
+            : await fetchCrmWorkspaceConfig(session, workspaceId)
           : await fetchCrmWorkspaceConfig(session, workspaceId);
 
         if (!cancelled) {
