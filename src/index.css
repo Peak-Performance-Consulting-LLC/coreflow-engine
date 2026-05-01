@@ -68,6 +68,14 @@
     @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 
+  .hero-grain {
+    background-image:
+      radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.14) 0.5px, transparent 0.8px),
+      radial-gradient(circle at 74% 66%, rgba(148, 163, 184, 0.1) 0.5px, transparent 0.8px);
+    background-size: 3px 3px, 4px 4px;
+    mix-blend-mode: soft-light;
+  }
+
   /* Sidebar nav active item */
   .nav-active {
     @apply bg-indigo-50 text-indigo-700 font-semibold;

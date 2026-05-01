@@ -1,59 +1,87 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Bot, Database, Workflow } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { LandingReveal } from './LandingReveal';
+
+const steps = [
+  {
+    id: '01',
+    title: 'Connect your workspace',
+    description: 'Set up your CRM mode, import data, and map core fields in a guided onboarding flow.',
+    icon: Database,
+  },
+  {
+    id: '02',
+    title: 'Activate AI call workflows',
+    description: 'Provision numbers, configure assistants, and route call outcomes into structured records.',
+    icon: Bot,
+  },
+  {
+    id: '03',
+    title: 'Automate and scale',
+    description: 'Track conversion metrics, queue follow-ups, and run reliable ops playbooks across teams.',
+    icon: Workflow,
+  },
+];
 
 export function HowItWorksSection() {
   return (
-    <section id="voice-highlight" className="section-shell pt-16">
-      <div className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-card lg:grid-cols-[0.92fr_1.08fr] lg:p-8">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Voice Operations Highlight</p>
-          <h2 className="mt-3 font-display text-3xl font-semibold leading-tight text-slate-900">
-            Turn inbound calls into structured CRM data
-          </h2>
-          <p className="mt-4 text-base leading-7 text-slate-600">
-            CoreFlow analyzes every inbound call and routes qualified outcomes into records, follow-ups, and
-            call-ops queues automatically.
-          </p>
-          <Link
-            to="/voice/ops"
-            className="mt-6 inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Open Voice Ops
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+    <section id="how-it-works" className="section-shell pt-20">
+      <LandingReveal className="mx-auto max-w-3xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">How It Works</p>
+        <h2 className="mt-2 font-display text-3xl font-semibold text-slate-950 sm:text-4xl">
+          Launch in days with a workflow-first setup
+        </h2>
+      </LandingReveal>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              {['Calls Loaded', 'Open Review', 'Leads Created'].map((item, index) => (
-                <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-medium text-slate-500">{item}</p>
-                  <p className="mt-1 text-xl font-semibold text-slate-900">{index === 0 ? '28' : index === 1 ? '20' : '8'}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-              <div className="grid grid-cols-6 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {['Caller', 'Number', 'Assistant', 'Outcome', 'Review', 'Created'].map((header) => (
-                  <div key={header} className="px-2 py-2">
-                    {header}
-                  </div>
-                ))}
-              </div>
-              {Array.from({ length: 4 }).map((_, rowIndex) => (
-                <div key={rowIndex} className="grid grid-cols-6 border-b border-slate-200 text-xs last:border-b-0">
-                  {Array.from({ length: 6 }).map((__, cellIndex) => (
-                    <div key={cellIndex} className="px-2 py-2 text-slate-600">
-                      {cellIndex === 0 ? '+12105100885' : cellIndex === 3 ? 'review_needed' : '...'}
+      <div className="mt-8 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <div className="relative space-y-4 before:absolute before:bottom-8 before:left-[21px] before:top-8 before:w-px before:bg-gradient-to-b before:from-indigo-300 before:via-indigo-200 before:to-cyan-200">
+          {steps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <LandingReveal key={step.title} delay={0.05 * index}>
+                <article className="group rounded-2xl border border-slate-300/70 bg-gradient-to-b from-white to-slate-100/70 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.12)] transition duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-[0_20px_36px_rgba(49,46,129,0.15)]">
+                  <div className="flex flex-wrap items-start gap-4">
+                    <div className="relative z-[1] flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-cyan-600 text-white shadow-sm transition duration-200 group-hover:shadow-[0_0_0_6px_rgba(99,102,241,0.12)]">
+                      <Icon className="h-5 w-5" />
                     </div>
-                  ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-700">
+                        Step {step.id}
+                      </p>
+                      <h3 className="mt-1 text-lg font-semibold text-slate-900">{step.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
+                    </div>
+                  </div>
+                </article>
+              </LandingReveal>
+            );
+          })}
+        </div>
+
+        <LandingReveal delay={0.12}>
+          <aside className="rounded-2xl border border-slate-600/40 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 shadow-[0_24px_58px_rgba(15,23,42,0.42)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Execution Snapshot</p>
+            <div className="mt-5 space-y-3">
+              {[
+                { metric: 'Onboarding Time', value: '3-5 days' },
+                { metric: 'Workflow Coverage', value: '95%' },
+                { metric: 'Setup Success Rate', value: '99.1%' },
+              ].map((item) => (
+                <div key={item.metric} className="rounded-xl border border-slate-600/40 bg-white/10 p-3 backdrop-blur">
+                  <p className="text-xs uppercase tracking-wide text-slate-300">{item.metric}</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+            <Link
+              to="/voice/ops"
+              className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+            >
+              Explore Voice Ops
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </aside>
+        </LandingReveal>
       </div>
     </section>
   );

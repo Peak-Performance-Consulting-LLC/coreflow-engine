@@ -1,4 +1,5 @@
 import { Bot, Download, ListChecks, PhoneCall, ShieldCheck, Table2 } from 'lucide-react';
+import { LandingReveal, LandingRevealItem, LandingStagger } from './LandingReveal';
 
 const features = [
   {
@@ -35,26 +36,30 @@ const features = [
 
 export function FeaturesSection() {
   return (
-    <section id="features" className="section-shell pt-14">
-      <div className="text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Core Features</p>
-        <h2 className="mt-2 font-display text-3xl font-semibold text-slate-900">CoreFlow&apos;s modern operational tools</h2>
-      </div>
+    <section id="features" className="section-shell pt-20">
+      <LandingReveal className="mx-auto max-w-3xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">Feature Stack</p>
+        <h2 className="mt-2 font-display text-3xl font-semibold text-slate-950 sm:text-4xl">
+          Purpose-built for teams that execute fast without losing control
+        </h2>
+      </LandingReveal>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <LandingStagger className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3" stagger={0.1}>
         {features.map((feature) => {
           const Icon = feature.icon;
           return (
-            <article key={feature.title} className="rounded-xl border border-slate-200 bg-white p-5 shadow-card">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                <Icon className="h-4 w-4" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-slate-900">{feature.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{feature.description}</p>
-            </article>
+            <LandingRevealItem key={feature.title}>
+              <article className="group h-full rounded-2xl border border-slate-300/70 bg-gradient-to-b from-white to-indigo-50/50 p-5 shadow-[0_15px_36px_rgba(15,23,42,0.12)] transition duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-[0_22px_40px_rgba(49,46,129,0.2)]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-sm shadow-indigo-200 transition duration-200 group-hover:shadow-[0_0_0_6px_rgba(99,102,241,0.16)]">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-slate-950">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{feature.description}</p>
+              </article>
+            </LandingRevealItem>
           );
         })}
-      </div>
+      </LandingStagger>
     </section>
   );
 }
