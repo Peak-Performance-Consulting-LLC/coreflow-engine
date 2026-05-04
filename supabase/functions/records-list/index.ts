@@ -2,14 +2,14 @@ import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { listRecordsForWorkspace } from '../_shared/records.ts';
 import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
 
-function normalizePositiveInteger(value: unknown, fallback: number) {
+function normalizePositiveInteger(value: unknown, fallback: number, max: number) {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed)) {
     return fallback;
   }
 
-  return Math.max(1, Math.trunc(parsed));
+  return Math.min(max, Math.max(1, Math.trunc(parsed)));
 }
 
 Deno.serve(async (request) => {
@@ -25,6 +25,8 @@ Deno.serve(async (request) => {
     }
 
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const pageInput = payload.page ?? payload.page_number;
+    const pageSizeInput = payload.pageSize ?? payload.page_size;
     const workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
 
     if (!workspaceId) {
@@ -41,8 +43,8 @@ Deno.serve(async (request) => {
       assignee_user_id: typeof payload.assignee_user_id === 'string' ? payload.assignee_user_id : null,
       status: typeof payload.status === 'string' ? payload.status : null,
       include_archived: Boolean(payload.include_archived),
-      page: normalizePositiveInteger(payload.page, 1),
-      pageSize: normalizePositiveInteger(payload.pageSize, 10),
+      page: normalizePositiveInteger(pageInput, 1, 100000),
+      pageSize: normalizePositiveInteger(pageSizeInput, 10, 100),
     });
 
     return jsonResponse(records);

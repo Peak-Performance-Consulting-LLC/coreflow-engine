@@ -32,9 +32,13 @@ function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function toPositiveInt(value: unknown, fallback: number) {
+function toPositiveInt(value: unknown, fallback: number, max: number) {
   const next = Number(value);
-  return Number.isFinite(next) && next > 0 ? Math.trunc(next) : fallback;
+  if (!Number.isFinite(next) || next <= 0) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.trunc(next));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -104,8 +108,8 @@ export async function listVoiceCallsForOps(
     throw new Error('workspaceId is required.');
   }
 
-  const page = toPositiveInt(filters.page, 1);
-  const pageSize = Math.min(100, toPositiveInt(filters.pageSize, 25));
+  const page = toPositiveInt(filters.page, 1, 100000);
+  const pageSize = toPositiveInt(filters.pageSize, 25, 100);
   const rangeFrom = (page - 1) * pageSize;
   const rangeTo = rangeFrom + pageSize - 1;
 
@@ -114,6 +118,7 @@ export async function listVoiceCallsForOps(
     .select('*', { count: 'exact' })
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
+    .limit(pageSize)
     .range(rangeFrom, rangeTo);
 
   if (filters.outcomeStatus) {

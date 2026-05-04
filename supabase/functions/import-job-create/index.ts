@@ -1,4 +1,11 @@
 import { corsHeaders, jsonResponse } from '../_shared/cors.ts';
+import {
+  buildSourceFingerprint,
+  getWorkspaceCrmType,
+  loadFieldContext,
+  loadTransformContext,
+  transformMappedValue,
+} from '../_shared/import-intelligence.ts';
 import { createRecordForWorkspace } from '../_shared/records.ts';
 import { authenticateRequest, ensureWorkspaceMembership } from '../_shared/server.ts';
 
@@ -16,8 +23,13 @@ const allowedCoreTargetKeys = new Set([
 
 interface ImportMappingPayload {
   source_column: string;
+  semantic_id?: string | null;
   target_type: 'core' | 'custom';
   target_key: string;
+  confidence?: number | null;
+  status?: 'auto_mapped' | 'needs_confirmation' | 'new_semantic' | 'ignored' | 'confirmed';
+  mapping_source?: 'profile' | 'exact' | 'alias' | 'heuristic' | 'manual' | 'none';
+  notes?: string | null;
 }
 
 interface ImportRowPayload {
@@ -30,6 +42,8 @@ interface CustomFieldDefinitionRow {
   field_key: string;
   label: string;
   field_type: string;
+  is_required: boolean;
+  options: unknown;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -109,17 +123,46 @@ function buildImportPayload(
   row: Record<string, unknown>,
   mappings: ImportMappingPayload[],
   customFieldByKey: Map<string, CustomFieldDefinitionRow>,
+  transformContext: {
+    rules: Array<{ target_type: string; target_key: string; rule_type: string; rule_config: Record<string, unknown> | null }>;
+    optionAliases: Array<{ field_key: string; alias_value: string; canonical_value: string }>;
+  },
   rowIndex: number,
 ) {
   const core: Record<string, string | null> = {};
   const custom: Record<string, unknown> = {};
+  const transformed: Record<string, unknown> = {};
+  const lineage: Array<{
+    source_column: string;
+    target_type: 'core' | 'custom';
+    target_key: string;
+    raw_value: unknown;
+    normalized_value: unknown;
+  }> = [];
 
   for (const mapping of mappings) {
     const rawValue = row[mapping.source_column];
-    const normalizedValue = getTrimmedString(rawValue);
 
     if (mapping.target_type === 'core') {
-      core[mapping.target_key] = normalizedValue || null;
+      const normalizedCoreValue = transformMappedValue({
+        value: rawValue,
+        targetType: 'core',
+        targetKey: mapping.target_key,
+        rules: transformContext.rules,
+        optionAliases: transformContext.optionAliases,
+      });
+      const asString = normalizedCoreValue === null || normalizedCoreValue === undefined
+        ? null
+        : getTrimmedString(normalizedCoreValue) || null;
+      core[mapping.target_key] = asString;
+      transformed[mapping.source_column] = asString;
+      lineage.push({
+        source_column: mapping.source_column,
+        target_type: mapping.target_type,
+        target_key: mapping.target_key,
+        raw_value: rawValue,
+        normalized_value: asString,
+      });
       continue;
     }
 
@@ -129,12 +172,31 @@ function buildImportPayload(
       throw new Error(`Unknown custom field: ${mapping.target_key}`);
     }
 
-    custom[mapping.target_key] = coerceCustomValue(rawValue, definition);
+    const normalizedCustomValue = transformMappedValue({
+      value: rawValue,
+      targetType: 'custom',
+      targetKey: mapping.target_key,
+      customFieldType: definition.field_type,
+      rules: transformContext.rules,
+      customOptions: Array.isArray(definition.options)
+        ? definition.options.map((option) => getTrimmedString(option)).filter(Boolean)
+        : [],
+      optionAliases: transformContext.optionAliases,
+    });
+    custom[mapping.target_key] = normalizedCustomValue === null ? null : coerceCustomValue(normalizedCustomValue, definition);
+    transformed[mapping.source_column] = custom[mapping.target_key];
+    lineage.push({
+      source_column: mapping.source_column,
+      target_type: mapping.target_type,
+      target_key: mapping.target_key,
+      raw_value: rawValue,
+      normalized_value: custom[mapping.target_key],
+    });
   }
 
   core.title = core.title || core.full_name || core.company_name || core.email || core.phone || `Imported row ${rowIndex + 1}`;
 
-  return { core, custom };
+  return { core, custom, transformed, lineage };
 }
 
 Deno.serve(async (request) => {
@@ -153,6 +215,10 @@ Deno.serve(async (request) => {
     const workspaceId = typeof payload.workspace_id === 'string' ? payload.workspace_id : '';
     const fileName = typeof payload.file_name === 'string' ? payload.file_name.trim() : '';
     const entityType = typeof payload.entity_type === 'string' ? payload.entity_type : 'record';
+    const sourceFingerprint = typeof payload.source_fingerprint === 'string' && payload.source_fingerprint.trim()
+      ? payload.source_fingerprint.trim()
+      : '';
+    const profileId = typeof payload.profile_id === 'string' ? payload.profile_id.trim() : null;
     const inputRows = Array.isArray(payload.rows)
       ? payload.rows
       : Array.isArray(payload.preview_rows)
@@ -190,8 +256,19 @@ Deno.serve(async (request) => {
 
         return {
           source_column: next.source_column.trim(),
+          semantic_id: typeof next.semantic_id === 'string' ? next.semantic_id.trim() : null,
           target_type: next.target_type as 'core' | 'custom',
           target_key: next.target_key.trim(),
+          confidence: typeof (mapping as Record<string, unknown>).confidence === 'number'
+            ? ((mapping as Record<string, unknown>).confidence as number)
+            : null,
+          status: typeof next.status === 'string'
+            ? next.status as 'auto_mapped' | 'needs_confirmation' | 'new_semantic' | 'ignored' | 'confirmed'
+            : 'confirmed',
+          mapping_source: typeof next.mapping_source === 'string'
+            ? next.mapping_source as 'profile' | 'exact' | 'alias' | 'heuristic' | 'manual' | 'none'
+            : 'manual',
+          notes: typeof next.notes === 'string' ? next.notes : null,
         };
       })
       .filter((mapping) => mapping.source_column && mapping.target_key);
@@ -206,10 +283,17 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'One or more import mappings use an invalid target_type.' }, 400);
     }
 
+    const effectiveMappings = mappingRows.filter((mapping) => mapping.status !== 'ignored');
+
+    if (effectiveMappings.length === 0) {
+      return jsonResponse({ error: 'All mappings are ignored. Map at least one CSV column before importing.' }, 400);
+    }
+
     const sourceColumns = new Set<string>();
     const targetPairs = new Set<string>();
+    const mappedTargetLabels = new Set<string>();
 
-    for (const mapping of mappingRows) {
+    for (const mapping of effectiveMappings) {
       if (sourceColumns.has(mapping.source_column)) {
         return jsonResponse({ error: 'Each source column can only be mapped once per import job.' }, 400);
       }
@@ -226,11 +310,28 @@ Deno.serve(async (request) => {
 
       sourceColumns.add(mapping.source_column);
       targetPairs.add(targetKey);
+      mappedTargetLabels.add(`${mapping.target_type}:${mapping.target_key}`);
+    }
+
+    const crmType = await getWorkspaceCrmType(authContext.serviceClient, workspaceId);
+    const fieldContext = await loadFieldContext(authContext.serviceClient, workspaceId, crmType);
+    const requiredTargets = new Set(
+      fieldContext.bindings
+        .filter((binding) => binding.is_required)
+        .map((binding) => `${binding.target_type}:${binding.target_key}`),
+    );
+    const missingRequiredTargets = [...requiredTargets].filter((target) => !mappedTargetLabels.has(target));
+
+    if (missingRequiredTargets.length > 0) {
+      return jsonResponse({
+        error: `Required import targets are missing: ${missingRequiredTargets.join(', ')}`,
+        missing_required_targets: missingRequiredTargets,
+      }, 400);
     }
 
     const { data: customFieldDefinitions, error: customFieldError } = await authContext.serviceClient
       .from('custom_field_definitions')
-      .select('field_key, label, field_type')
+      .select('field_key, label, field_type, is_required, options')
       .eq('workspace_id', workspaceId)
       .eq('entity_type', 'record')
       .eq('is_active', true);
@@ -242,11 +343,23 @@ Deno.serve(async (request) => {
     const customFieldByKey = new Map(
       ((customFieldDefinitions ?? []) as CustomFieldDefinitionRow[]).map((field) => [field.field_key, field]),
     );
+    const requiredCustomTargets = ((customFieldDefinitions ?? []) as CustomFieldDefinitionRow[])
+      .filter((field) => field.is_required)
+      .map((field) => `custom:${field.field_key}`);
 
-    for (const mapping of mappingRows) {
+    for (const mapping of effectiveMappings) {
       if (mapping.target_type === 'custom' && !customFieldByKey.has(mapping.target_key)) {
         return jsonResponse({ error: `Unknown custom import target: ${mapping.target_key}` }, 400);
       }
+    }
+
+    const missingRequiredCustomTargets = requiredCustomTargets.filter((target) => !mappedTargetLabels.has(target));
+
+    if (missingRequiredCustomTargets.length > 0) {
+      return jsonResponse({
+        error: `Required custom fields are missing: ${missingRequiredCustomTargets.join(', ')}`,
+        missing_required_targets: [...missingRequiredTargets, ...missingRequiredCustomTargets],
+      }, 400);
     }
 
     const { data: job, error: jobError } = await authContext.serviceClient
@@ -256,6 +369,15 @@ Deno.serve(async (request) => {
         entity_type: entityType,
         file_name: fileName,
         status: 'pending',
+        phase: 'ingest',
+        source_fingerprint: sourceFingerprint || buildSourceFingerprint(Object.keys(importRows[0] ?? {})),
+        profile_id: profileId,
+        approval_status: 'approved',
+        stats_json: {
+          needs_confirmation_count: mappingRows.filter((mapping) => mapping.status === 'needs_confirmation').length,
+          new_semantic_count: mappingRows.filter((mapping) => mapping.status === 'new_semantic').length,
+          ignored_count: mappingRows.filter((mapping) => mapping.status === 'ignored').length,
+        },
         total_rows: importRows.length,
         success_rows: 0,
         failed_rows: 0,
@@ -272,8 +394,13 @@ Deno.serve(async (request) => {
       mappingRows.map((mapping) => ({
         import_job_id: job.id,
         source_column: mapping.source_column,
+        semantic_id: mapping.semantic_id ?? null,
         target_type: mapping.target_type,
         target_key: mapping.target_key,
+        confidence: mapping.confidence ?? null,
+        status: mapping.status ?? 'confirmed',
+        mapping_source: mapping.mapping_source ?? 'manual',
+        notes: mapping.notes ?? null,
       })),
     );
 
@@ -307,16 +434,17 @@ Deno.serve(async (request) => {
 
     await authContext.serviceClient
       .from('import_jobs')
-      .update({ status: 'processing' })
+      .update({ status: 'processing', phase: 'execute' })
       .eq('id', job.id);
 
+    const transformContext = await loadTransformContext(authContext.serviceClient, workspaceId, crmType);
     let successRows = 0;
     let failedRows = 0;
     const rowFailures: Array<{ rowIndex: number; error: string }> = [];
 
     for (const row of (persistedImportRows as ImportRowPayload[]).sort((left, right) => left.row_index - right.row_index)) {
       try {
-        const importPayload = buildImportPayload(row.raw_data, mappingRows, customFieldByKey, row.row_index);
+        const importPayload = buildImportPayload(row.raw_data, effectiveMappings, customFieldByKey, transformContext, row.row_index);
         const created = await createRecordForWorkspace(authContext.serviceClient, authContext.user.id, {
           workspace_id: workspaceId,
           core: importPayload.core,
@@ -337,6 +465,9 @@ Deno.serve(async (request) => {
           .update({
             status: 'processed',
             error_message: null,
+            transformed_data: importPayload.transformed,
+            validation_errors: null,
+            lineage: importPayload.lineage,
             created_record_id: created.record.id,
           })
           .eq('id', row.id);
@@ -354,6 +485,9 @@ Deno.serve(async (request) => {
           .update({
             status: 'failed',
             error_message: message,
+            transformed_data: null,
+            validation_errors: [{ message }],
+            lineage: null,
             created_record_id: null,
           })
           .eq('id', row.id);
@@ -371,8 +505,15 @@ Deno.serve(async (request) => {
       .from('import_jobs')
       .update({
         status: finalStatus,
+        phase: 'completed',
         success_rows: successRows,
         failed_rows: failedRows,
+        stats_json: {
+          total_rows: importRows.length,
+          success_rows: successRows,
+          failed_rows: failedRows,
+          missing_required_targets: missingRequiredTargets,
+        },
       })
       .eq('id', job.id)
       .select('id, workspace_id, entity_type, file_name, status, total_rows, success_rows, failed_rows, created_at, updated_at')

@@ -71,6 +71,10 @@ function upsertInviteList(current: WorkspaceTeamInvite[], nextInvite: WorkspaceT
   return next;
 }
 
+type TeamRemovalTarget =
+  | { kind: 'member'; member: WorkspaceTeamMember }
+  | { kind: 'invite'; invite: WorkspaceTeamInvite };
+
 async function copyInviteLinkWithFallback(inviteLink: string) {
   try {
     if (navigator.clipboard?.writeText) {
@@ -101,6 +105,7 @@ export function TeamPage() {
   const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [ownerEmailConfigured, setOwnerEmailConfigured] = useState<boolean>(true);
   const [showEmailConfigModal, setShowEmailConfigModal] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState<TeamRemovalTarget | null>(null);
 
   const isOwner = isWorkspaceOwner(workspace);
 
@@ -246,38 +251,39 @@ export function TeamPage() {
   }
 
   async function handleRemoveMember(member: WorkspaceTeamMember) {
-    if (!session || !workspace) {
-      return;
-    }
-
-    if (!window.confirm(`Remove ${member.full_name || member.email || 'this member'} from the workspace?`)) {
-      return;
-    }
-
-    const removingToken = `member:${member.user_id}`;
-    setRemovingKey(removingToken);
-
-    try {
-      await removeWorkspaceMember(session, workspace.id, member.user_id);
-      setMembers((current) => current.filter((item) => item.user_id !== member.user_id));
-      toast.success('Workspace member removed.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to remove workspace member.';
-      toast.error(message);
-    } finally {
-      setRemovingKey(null);
-    }
+    setPendingRemoval({ kind: 'member', member });
   }
 
   async function handleRevokeInvite(invite: WorkspaceTeamInvite) {
-    if (!session || !workspace) {
+    setPendingRemoval({ kind: 'invite', invite });
+  }
+
+  async function handleConfirmRemoval() {
+    if (!session || !workspace || !pendingRemoval) {
       return;
     }
 
-    if (!window.confirm(`Cancel the pending invite for ${invite.invited_email}?`)) {
+    if (pendingRemoval.kind === 'member') {
+      const member = pendingRemoval.member;
+      const removingToken = `member:${member.user_id}`;
+      setRemovingKey(removingToken);
+
+      try {
+        await removeWorkspaceMember(session, workspace.id, member.user_id);
+        setMembers((current) => current.filter((item) => item.user_id !== member.user_id));
+        toast.success('Workspace member removed.');
+        setPendingRemoval(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to remove workspace member.';
+        toast.error(message);
+      } finally {
+        setRemovingKey(null);
+      }
+
       return;
     }
 
+    const invite = pendingRemoval.invite;
     const removingToken = `invite:${invite.id}`;
     setRemovingKey(removingToken);
 
@@ -285,6 +291,7 @@ export function TeamPage() {
       await revokeWorkspaceInvite(session, workspace.id, invite.id);
       setInvites((current) => current.filter((item) => item.id !== invite.id));
       toast.success('Pending invite canceled.');
+      setPendingRemoval(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to cancel invite.';
       toast.error(message);
@@ -651,6 +658,39 @@ export function TeamPage() {
                 }}
               >
                 Configure email
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingRemoval ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-slate-950">
+              {pendingRemoval.kind === 'member' ? 'Remove workspace member?' : 'Cancel invite?'}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {pendingRemoval.kind === 'member'
+                ? `Remove ${pendingRemoval.member.full_name || pendingRemoval.member.email || 'this member'} from the workspace?`
+                : `Cancel the pending invite for ${pendingRemoval.invite.invited_email}?`}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={Boolean(removingKey)}
+                onClick={() => setPendingRemoval(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                loading={Boolean(removingKey)}
+                onClick={() => void handleConfirmRemoval()}
+              >
+                {pendingRemoval.kind === 'member' ? 'Remove member' : 'Cancel invite'}
               </Button>
             </div>
           </div>

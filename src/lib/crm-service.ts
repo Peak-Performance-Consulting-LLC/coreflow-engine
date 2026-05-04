@@ -4,8 +4,15 @@ import type {
   CustomFieldDefinitionInput,
   CustomFieldDefinition,
   CrmWorkspaceConfig,
+  ImportAnalyzeInput,
+  ImportAnalyzeResult,
+  ImportIntelligenceConfigResult,
+  ImportIntelligenceConfigSaveInput,
+  ImportMappingApproveInput,
+  ImportMappingApproveResult,
   ImportJobInput,
   ImportJobResult,
+  ImportProfileSaveInput,
   RecordDetailResponse,
   RecordListPageResult,
   RecordListQuery,
@@ -392,4 +399,40 @@ export async function createImportJob(session: Session, payload: ImportJobInput)
   }
 
   return response;
+}
+
+export async function analyzeImportMappings(session: Session, payload: ImportAnalyzeInput) {
+  return invoke<ImportAnalyzeResult>('import-analyze', session, payload);
+}
+
+export async function approveImportMappings(session: Session, payload: ImportMappingApproveInput) {
+  return invoke<ImportMappingApproveResult>('import-mapping-approve', session, payload);
+}
+
+export async function saveImportProfile(session: Session, payload: ImportProfileSaveInput) {
+  return invoke<{ profile: { id: string; profile_name: string }; mappings_count: number; message: string }>(
+    'import-profile-save',
+    session,
+    payload,
+  );
+}
+
+export async function resolveImportProfile(session: Session, payload: { workspace_id: string; columns: string[] }) {
+  return invoke<{
+    workspace_id: string;
+    crm_type: string;
+    source_fingerprint: string;
+    profile: ImportAnalyzeResult['profile'];
+  }>('import-profile-resolve', session, payload);
+}
+
+export async function getImportIntelligenceConfig(session: Session, payload: { workspace_id: string }) {
+  return invoke<ImportIntelligenceConfigResult>('import-intelligence-config-get', session, payload);
+}
+
+export async function saveImportIntelligenceConfig(session: Session, payload: ImportIntelligenceConfigSaveInput) {
+  return invoke<{
+    message: string;
+    counts: { aliases: number; bindings: number; transform_rules: number; option_aliases: number };
+  }>('import-intelligence-config-save', session, payload);
 }

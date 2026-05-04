@@ -6,6 +6,16 @@ function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizePositiveInteger(value: unknown, fallback: number, max: number) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(1, Math.trunc(parsed)));
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -19,6 +29,8 @@ Deno.serve(async (request) => {
     }
 
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const pageInput = payload.page ?? payload.page_number;
+    const pageSizeInput = payload.page_size ?? payload.pageSize;
     const workspaceId = normalizeString(payload.workspace_id);
 
     if (!workspaceId) {
@@ -36,8 +48,8 @@ Deno.serve(async (request) => {
       hasRecord: typeof payload.has_record === 'boolean' ? payload.has_record : null,
       dateFrom: normalizeString(payload.date_from) || null,
       dateTo: normalizeString(payload.date_to) || null,
-      page: typeof payload.page === 'number' ? payload.page : undefined,
-      pageSize: typeof payload.page_size === 'number' ? payload.page_size : undefined,
+      page: normalizePositiveInteger(pageInput, 1, 100000),
+      pageSize: normalizePositiveInteger(pageSizeInput, 25, 100),
     });
 
     return jsonResponse(result);

@@ -688,6 +688,7 @@ export async function listRecordsForWorkspace(serviceClient: EdgeClient, filters
   const { data, error } = await applyFilters(serviceClient.from('records').select(recordSelect))
     .order('updated_at', { ascending: false })
     .order('id', { ascending: false })
+    .limit(pageSize)
     .range(from, to);
 
   if (error) {

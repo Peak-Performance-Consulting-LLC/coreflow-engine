@@ -203,14 +203,21 @@ export interface RecordListPageResult {
 
 export interface ImportMappingInput {
   source_column: string;
+  semantic_id?: string | null;
   target_type: 'core' | 'custom';
   target_key: string;
+  confidence?: number | null;
+  status?: 'auto_mapped' | 'needs_confirmation' | 'new_semantic' | 'ignored' | 'confirmed';
+  mapping_source?: 'profile' | 'exact' | 'alias' | 'heuristic' | 'manual' | 'none';
+  notes?: string | null;
 }
 
 export interface ImportJobInput {
   workspace_id: string;
   entity_type?: 'record';
   file_name: string;
+  source_fingerprint?: string;
+  profile_id?: string | null;
   rows: Array<Record<string, unknown>>;
   mappings: ImportMappingInput[];
 }
@@ -239,4 +246,143 @@ export interface ImportJobResult {
 
 export interface RecordPageContext {
   crmType: CRMType;
+}
+
+export interface ImportMappingSuggestion {
+  source_column: string;
+  semantic_id: string | null;
+  semantic_key: string | null;
+  target_type: 'core' | 'custom' | null;
+  target_key: string | null;
+  confidence: number;
+  status: 'auto_mapped' | 'needs_confirmation' | 'new_semantic' | 'ignored' | 'confirmed';
+  mapping_source: 'profile' | 'exact' | 'alias' | 'heuristic' | 'manual' | 'none';
+  notes: string | null;
+  sample_values: string[];
+}
+
+export interface ImportAnalyzeInput {
+  workspace_id: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+}
+
+export interface ImportAnalyzeResult {
+  workspace_id: string;
+  crm_type: CRMType | string;
+  source_fingerprint: string;
+  profile: {
+    id: string;
+    profile_name: string;
+    source_fingerprint: string;
+    mappings: Array<{
+      source_column: string;
+      semantic_id: string | null;
+      target_type: 'core' | 'custom';
+      target_key: string;
+      confidence: number | null;
+    }>;
+  } | null;
+  suggestions: ImportMappingSuggestion[];
+  required_missing_targets: string[];
+  needs_confirmation_count: number;
+  new_semantic_count: number;
+}
+
+export interface ImportMappingApproveInput {
+  workspace_id: string;
+  mappings: ImportMappingInput[];
+  create_fields?: Array<{
+    source_column: string;
+    field_key: string;
+    label: string;
+    field_type: CustomFieldType;
+    options?: string[];
+    is_required?: boolean;
+    placeholder?: string | null;
+    help_text?: string | null;
+  }>;
+}
+
+export interface ImportMappingApproveResult {
+  workspace_id: string;
+  mappings: ImportMappingInput[];
+  missing_required_targets: string[];
+  created_custom_fields: string[];
+  message: string;
+}
+
+export interface ImportProfileSaveInput {
+  workspace_id: string;
+  columns?: string[];
+  source_fingerprint?: string;
+  profile_name?: string;
+  is_default?: boolean;
+  mappings: ImportMappingInput[];
+}
+
+export interface ImportIntelligenceSemantic {
+  id: string;
+  semantic_key: string;
+  label: string;
+  description: string | null;
+}
+
+export interface ImportIntelligenceAlias {
+  id?: string;
+  semantic_id: string;
+  alias_text: string;
+  weight: number;
+  scope: 'crm' | 'workspace';
+}
+
+export interface ImportIntelligenceBinding {
+  id?: string;
+  semantic_id: string;
+  target_type: 'core' | 'custom';
+  target_key: string;
+  is_required: boolean;
+  scope: 'crm' | 'workspace';
+}
+
+export interface ImportIntelligenceTransformRule {
+  id?: string;
+  target_type: 'core' | 'custom';
+  target_key: string;
+  rule_type: 'date' | 'number' | 'boolean' | 'enum' | 'phone' | 'currency';
+  rule_config: Record<string, unknown>;
+  scope: 'crm' | 'workspace';
+}
+
+export interface ImportIntelligenceOptionAlias {
+  id?: string;
+  field_key: string;
+  alias_value: string;
+  canonical_value: string;
+  scope: 'crm' | 'workspace';
+}
+
+export interface ImportIntelligenceConfigResult {
+  workspace_id: string;
+  crm_type: string;
+  semantics: ImportIntelligenceSemantic[];
+  aliases: Array<ImportIntelligenceAlias & { workspace_id?: string | null; crm_type?: string | null }>;
+  bindings: Array<ImportIntelligenceBinding & { workspace_id?: string | null; crm_type?: string | null }>;
+  transform_rules: Array<ImportIntelligenceTransformRule & { workspace_id?: string | null; crm_type?: string | null }>;
+  option_aliases: Array<ImportIntelligenceOptionAlias & { workspace_id?: string | null; crm_type?: string | null }>;
+  custom_fields: Array<{
+    field_key: string;
+    label: string;
+    field_type: CustomFieldType;
+    is_required: boolean;
+  }>;
+}
+
+export interface ImportIntelligenceConfigSaveInput {
+  workspace_id: string;
+  clear_scope?: 'all';
+  aliases: ImportIntelligenceAlias[];
+  bindings: ImportIntelligenceBinding[];
+  transform_rules: ImportIntelligenceTransformRule[];
+  option_aliases: ImportIntelligenceOptionAlias[];
 }

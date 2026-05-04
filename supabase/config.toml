@@ -46,6 +46,18 @@ verify_jwt = false
 verify_jwt = false
 [functions.import-job-create]
 verify_jwt = false
+[functions.import-analyze]
+verify_jwt = false
+[functions.import-mapping-approve]
+verify_jwt = false
+[functions.import-profile-resolve]
+verify_jwt = false
+[functions.import-profile-save]
+verify_jwt = false
+[functions.import-intelligence-config-get]
+verify_jwt = false
+[functions.import-intelligence-config-save]
+verify_jwt = false
 [functions.record-add-note]
 verify_jwt = false
 [functions.record-create]
