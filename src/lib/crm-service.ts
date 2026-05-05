@@ -391,6 +391,27 @@ export async function createRecordTask(
   return response.task;
 }
 
+export async function deleteWorkspaceRecords(
+  session: Session,
+  payload: { workspace_id: string; record_ids: string[] },
+) {
+  const response = await invoke<{ deleted_count: number; deleted_ids: string[]; requested_count: number; skipped_ids: string[] }>(
+    'records-delete',
+    session,
+    payload,
+  );
+
+  for (const recordId of response.deleted_ids) {
+    invalidateRecordDetail(payload.workspace_id, recordId);
+  }
+
+  if (response.deleted_count > 0) {
+    invalidateWorkspaceRecordLists(payload.workspace_id);
+  }
+
+  return response;
+}
+
 export async function createImportJob(session: Session, payload: ImportJobInput) {
   const response = await invoke<ImportJobResult>('import-job-create', session, payload);
 

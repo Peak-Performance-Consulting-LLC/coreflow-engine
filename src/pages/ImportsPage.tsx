@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -73,6 +73,13 @@ const workflowSteps = [
   { id: 'status', label: 'Status', icon: CheckCircle2 },
 ] as const;
 
+interface PendingNewField {
+  source_column: string;
+  field_key: string;
+  label: string;
+  selected: boolean;
+}
+
 function guessMapping(column: string, config: CrmWorkspaceConfig): ImportMappingInput | null {
   const normalized = column.toLowerCase().trim().replace(/\s+/g, '_');
   const coreTarget = coreTargets.find((target) => target.key === normalized);
@@ -107,6 +114,14 @@ function suggestionToMapping(suggestion: ImportMappingSuggestion): ImportMapping
   };
 }
 
+function normalizeFieldKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 64);
+}
+
 export function ImportsPage() {
   const navigate = useNavigate();
   const { session, workspace, signOut } = useAuth();
@@ -120,7 +135,8 @@ export function ImportsPage() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [saveProfileOnImport, setSaveProfileOnImport] = useState(true);
-  const [autoCreateNewFields, setAutoCreateNewFields] = useState(false);
+  const [showNewFieldsConfirmModal, setShowNewFieldsConfirmModal] = useState(false);
+  const [pendingNewFields, setPendingNewFields] = useState<PendingNewField[]>([]);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
   const [intelligenceSaving, setIntelligenceSaving] = useState(false);
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
@@ -150,6 +166,9 @@ export function ImportsPage() {
   });
   const [mappingValidationRequested, setMappingValidationRequested] = useState(false);
   const [mappingTouchedTargets, setMappingTouchedTargets] = useState<Set<string>>(new Set());
+  const [showWorkspaceFieldsPanel, setShowWorkspaceFieldsPanel] = useState(true);
+  const [workspaceFieldSearch, setWorkspaceFieldSearch] = useState('');
+  const [onlyShowUnmappedTargets, setOnlyShowUnmappedTargets] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<ImportJobResult | null>(null);
   const isOwner = isWorkspaceOwner(workspace);
@@ -221,6 +240,71 @@ export function ImportsPage() {
     () => new Map((analysis?.suggestions ?? []).map((item) => [item.source_column, item])),
     [analysis],
   );
+
+  const coreTargetKeySet = useMemo(
+    () => new Set(coreTargets.map((target) => target.key)),
+    [],
+  );
+
+  const newUnmappedFieldCount = useMemo(() => {
+    if (!config) {
+      return 0;
+    }
+
+    const existingCustomFieldKeys = new Set(config.customFields.map((field) => field.field_key));
+
+    return unmappedSourceColumns
+      .filter((column) => {
+        const normalized = normalizeFieldKey(column);
+
+        if (normalized && coreTargetKeySet.has(normalized)) {
+          return false;
+        }
+
+        if (normalized && existingCustomFieldKeys.has(normalized)) {
+          return false;
+        }
+
+        return true;
+      })
+      .length;
+  }, [config, coreTargetKeySet, unmappedSourceColumns]);
+
+  const workspaceFieldRows = useMemo(() => {
+    const search = workspaceFieldSearch.trim().toLowerCase();
+
+    return targetFields.filter((target) => {
+      if (!search) {
+        return true;
+      }
+
+      const customField = target.target_type === 'custom' ? customFieldByKey.get(target.target_key) : null;
+      const helpText = customField?.help_text?.trim() ?? '';
+      const combined = `${target.label} ${target.target_key} ${helpText}`.toLowerCase();
+
+      return combined.includes(search);
+    });
+  }, [customFieldByKey, targetFields, workspaceFieldSearch]);
+
+  const visibleTargetFields = useMemo(
+    () => (onlyShowUnmappedTargets
+      ? targetFields.filter((target) => !mappedTargetKeySet.has(`${target.target_type}:${target.target_key}`))
+      : targetFields),
+    [mappedTargetKeySet, onlyShowUnmappedTargets, targetFields],
+  );
+
+  const workspaceFieldSummary = useMemo(() => {
+    const required = workspaceFieldRows.filter((field) => field.required);
+    const custom = workspaceFieldRows.filter((field) => field.target_type === 'custom');
+    const mapped = workspaceFieldRows.filter((field) => mappedTargetKeySet.has(`${field.target_type}:${field.target_key}`));
+
+    return {
+      total: workspaceFieldRows.length,
+      required: required.length,
+      custom: custom.length,
+      mapped: mapped.length,
+    };
+  }, [mappedTargetKeySet, workspaceFieldRows]);
 
   const activeStepIndex = useMemo(() => {
     if (importResult) return 5;
@@ -467,8 +551,12 @@ export function ImportsPage() {
     setColumns(parsed.columns);
     setPreviewRows(parsed.rows.slice(0, 25));
     setImportResult(null);
+    setShowNewFieldsConfirmModal(false);
+    setPendingNewFields([]);
     setMappingValidationRequested(false);
     setMappingTouchedTargets(new Set());
+    setWorkspaceFieldSearch('');
+    setOnlyShowUnmappedTargets(false);
 
     try {
       const analysisResult = await analyzeImportMappings(session, {
@@ -581,7 +669,52 @@ export function ImportsPage() {
     toast.success('Mapping looks good. It will be saved when import job is created.');
   }
 
-  async function handleCreateJob() {
+  function buildUnmappedNewFieldCandidates() {
+    if (!config) {
+      return [];
+    }
+
+    const usedFieldKeys = new Set(config.customFields.map((field) => field.field_key));
+    let fallbackIndex = 1;
+
+    return unmappedSourceColumns
+      .filter((sourceColumn) => {
+        const normalized = normalizeFieldKey(sourceColumn);
+
+        if (normalized && coreTargetKeySet.has(normalized)) {
+          return false;
+        }
+
+        if (normalized && usedFieldKeys.has(normalized)) {
+          return false;
+        }
+
+        return true;
+      })
+      .map((sourceColumn) => {
+        const normalized = normalizeFieldKey(sourceColumn);
+        const baseFieldKey = normalized || `import_field_${fallbackIndex++}`;
+
+        let fieldKey = baseFieldKey;
+        let suffix = 1;
+
+        while (usedFieldKeys.has(fieldKey)) {
+          const suffixToken = `_${suffix}`;
+          fieldKey = `${baseFieldKey.slice(0, Math.max(0, 64 - suffixToken.length))}${suffixToken}`;
+          suffix += 1;
+        }
+
+        usedFieldKeys.add(fieldKey);
+
+        return {
+          source_column: sourceColumn,
+          field_key: fieldKey,
+          label: sourceColumn,
+        };
+      });
+  }
+
+  async function handleCreateJob(createFields: Array<{ source_column: string; field_key: string; label: string }> = []) {
     if (!session || !workspace || !fileName || columns.length === 0) {
       return;
     }
@@ -593,27 +726,14 @@ export function ImportsPage() {
       const approved = await approveImportMappings(session, {
         workspace_id: workspace.id,
         mappings,
-        create_fields: autoCreateNewFields && analysis
-          ? analysis.suggestions
-            .filter((item) => item.status === 'new_semantic')
-            .filter((item) => !mappings.some((mapping) => mapping.source_column === item.source_column))
-            .map((item, index) => {
-              const fieldKey = item.source_column
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '_')
-                .replace(/^_+|_+$/g, '')
-                .slice(0, 64);
-
-              return {
-                source_column: item.source_column,
-                field_key: fieldKey || `import_field_${index + 1}`,
-                label: item.source_column,
-                field_type: 'text',
-                is_required: false,
-                options: [],
-              };
-            })
-          : [],
+        create_fields: createFields.map((item) => ({
+          source_column: item.source_column,
+          field_key: item.field_key,
+          label: item.label,
+          field_type: 'text',
+          is_required: false,
+          options: [],
+        })),
       });
 
       const finalMappings = approved.mappings;
@@ -656,13 +776,39 @@ export function ImportsPage() {
     }
   }
 
+  function handleCreateJobIntent() {
+    const candidates = buildUnmappedNewFieldCandidates();
+
+    if (candidates.length === 0) {
+      void handleCreateJob([]);
+      return;
+    }
+
+    setPendingNewFields(candidates.map((item) => ({ ...item, selected: true })));
+    setShowNewFieldsConfirmModal(true);
+  }
+
+  function handleConfirmNewFieldsSelection() {
+    setShowNewFieldsConfirmModal(false);
+
+    const selectedFields = pendingNewFields
+      .filter((item) => item.selected)
+      .map((item) => ({
+        source_column: item.source_column,
+        field_key: item.field_key,
+        label: item.label,
+      }));
+
+    void handleCreateJob(selectedFields);
+  }
+
   if (!session || !workspace) {
     return <FullPageLoader label="Loading import tools..." />;
   }
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-6">
+      <div className="space-y-6 ">
         <PageHeader
           eyebrow="Imports"
           title="Import jobs"
@@ -757,15 +903,6 @@ export function ImportsPage() {
                     className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   Save this mapping as default profile for future imports from similar files.
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={autoCreateNewFields}
-                    onChange={(event) => setAutoCreateNewFields(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  Auto-create text custom fields for unmapped new-semantic columns.
                 </label>
               </div>
             </Card>
@@ -885,12 +1022,12 @@ export function ImportsPage() {
         ) : null}
 
         {config && columns.length > 0 ? (
-          <div className="p-6 bg-transparent" data-guide-id="imports-mapping-card">
+          <div className="p-6 bg-slate-100" data-guide-id="imports-mapping-card">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-2">
                 <div>
-                  <h3 className="font-display text-2xl text-slate-900">Map Fields</h3>
-                  <p className="mt-1 text-sm text-slate-600">Target fields to source columns from your CSV data.</p>
+                  <h3 className="font-display text-4xl text-slate-900">Map Fields</h3>
+                  <p className="mt-1 text-sm text-black">Target fields to source columns from your CSV data.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" size="sm" variant="secondary" onClick={handleAutoMapFields}>
@@ -903,6 +1040,15 @@ export function ImportsPage() {
                   >
                     Reset mapping
                   </button>
+                  <label className="ml-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={onlyShowUnmappedTargets}
+                      onChange={(event) => setOnlyShowUnmappedTargets(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Only show unmapped targets
+                  </label>
                 </div>
               </div>
 
@@ -933,6 +1079,80 @@ export function ImportsPage() {
               </div>
             </div>
 
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-600">Workspace fields</div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    These fields already exist in your workspace. If your CSV has matching data, map it here.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWorkspaceFieldsPanel((current) => !current)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {showWorkspaceFieldsPanel ? 'Hide fields' : 'Show fields'}
+                </button>
+              </div>
+
+              {showWorkspaceFieldsPanel ? (
+                <div className="mt-4">
+                  <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-center">
+                    <input
+                      value={workspaceFieldSearch}
+                      onChange={(event) => setWorkspaceFieldSearch(event.target.value)}
+                      placeholder="Search workspace fields..."
+                      className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    />
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">
+                        {workspaceFieldSummary.total} total
+                      </span>
+                      <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-indigo-700">
+                        {workspaceFieldSummary.required} required
+                      </span>
+                      <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-cyan-800">
+                        {workspaceFieldSummary.custom} custom
+                      </span>
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+                        {workspaceFieldSummary.mapped} mapped
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {workspaceFieldRows.length > 0 ? (
+                      workspaceFieldRows.map((field) => {
+                        const targetId = `${field.target_type}:${field.target_key}`;
+                        const isMapped = mappedTargetKeySet.has(targetId);
+
+                        return (
+                          <span
+                            key={`workspace-field-${targetId}`}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                              isMapped
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : field.required
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-slate-200 bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <span>{field.label}</span>
+                            <span className="text-[10px] uppercase tracking-[0.1em]">
+                              {isMapped ? 'Mapped' : field.required ? 'Required' : 'Optional'}
+                            </span>
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-slate-500">No fields match your search.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
               <div className="max-h-[560px] min-w-[920px] overflow-auto">
                 <table className="w-full border-collapse text-sm bg-slate-100">
@@ -944,7 +1164,7 @@ export function ImportsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {targetFields.map((target) => {
+                    {visibleTargetFields.map((target) => {
                       const targetId = `${target.target_type}:${target.target_key}`;
                       const selectedSource = currentSourceForTarget(target.target_type, target.target_key);
                       const selectedSuggestion = selectedSource !== 'ignore' ? suggestionBySource.get(selectedSource) : undefined;
@@ -1014,7 +1234,7 @@ export function ImportsPage() {
                                   transition={{ duration: 0.16 }}
                                   className="mt-1.5 text-[11px] font-medium text-rose-700"
                                 >
-                                  Required field — please map a column
+                                  Required field - please map a column
                                 </motion.p>
                               ) : null}
                             </AnimatePresence>
@@ -1048,6 +1268,13 @@ export function ImportsPage() {
                         </tr>
                       );
                     })}
+                    {visibleTargetFields.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-6 text-center text-sm text-slate-500">
+                          No targets match the current filter.
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -1100,12 +1327,17 @@ export function ImportsPage() {
                 <div>
                   <div className="text-sm font-semibold text-slate-900">Ready to create import job?</div>
                   <div className="text-sm text-slate-600">Confirm the mapping and preview, then start the import.</div>
+                  {newUnmappedFieldCount > 0 ? (
+                    <div className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      New unmapped fields detected: {newUnmappedFieldCount}
+                    </div>
+                  ) : null}
                 </div>
                 <Button
                   type="button"
                   size="md"
                   data-guide-id="imports-create-job"
-                  onClick={() => void handleCreateJob()}
+                  onClick={handleCreateJobIntent}
                   loading={submitting}
                   disabled={!fileName || allRows.length === 0 || analysisLoading}
                 >
@@ -1441,6 +1673,81 @@ export function ImportsPage() {
           ) : null}
         </AnimatePresence>
       </div>
+
+      {showNewFieldsConfirmModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/50"
+            aria-label="Close new fields dialog"
+            onClick={() => setShowNewFieldsConfirmModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-600">Confirm new fields</div>
+            <h3 className="mt-2 font-display text-2xl text-slate-900">These fields are new to your workspace</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              These are your new fields that are not present in the workspace. Do you want to add them or ignore them?
+            </p>
+
+            <div className="mt-5 max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {pendingNewFields.map((item) => (
+                <label key={item.source_column} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={item.selected}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setPendingNewFields((current) => current.map((field) => (
+                        field.source_column === item.source_column
+                          ? { ...field, selected: checked }
+                          : field
+                      )));
+                    }}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-slate-800">
+                    {item.source_column}
+                    <span className="ml-2 text-xs text-slate-500">key: {item.field_key}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingNewFields((current) => current.map((item) => ({ ...item, selected: true })))}
+              >
+                Add all
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingNewFields((current) => current.map((item) => ({ ...item, selected: false })))}
+              >
+                Ignore all
+              </Button>
+              <div className="text-xs text-slate-500">
+                Selected: {pendingNewFields.filter((item) => item.selected).length} of {pendingNewFields.length}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setShowNewFieldsConfirmModal(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleConfirmNewFieldsSelection} loading={submitting}>
+                Confirm and import
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </WorkspaceLayout>
   );
 }
+
+

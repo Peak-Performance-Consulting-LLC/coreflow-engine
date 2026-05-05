@@ -1,4 +1,5 @@
 import { DatabaseZap, SearchX } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { CrmWorkspaceConfig, RecordListPageResult, RecordSummary } from '../../lib/crm-types';
 import type { CRMType } from '../../lib/types';
@@ -15,11 +16,18 @@ interface RecordListProps {
   crmType: CRMType;
   hasActiveFilters: boolean;
   isRefreshing?: boolean;
+  selectedRecordIds: Set<string>;
+  allVisibleSelected: boolean;
+  someVisibleSelected: boolean;
+  isDeletingSelected?: boolean;
   pagination: Pick<RecordListPageResult, 'page' | 'pageSize' | 'total' | 'totalPages' | 'hasNextPage' | 'hasPrevPage'>;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onCreateRecord: () => void;
   onClearFilters: () => void;
+  onToggleSelectAllVisible: (checked: boolean) => void;
+  onToggleRecordSelection: (recordId: string, checked: boolean) => void;
+  onRequestDeleteSelected: () => void;
   onEditLead: (record: RecordSummary) => void;
   onOpenAction: (record: RecordSummary, mode: Exclude<RecordQuickActionMode, null>) => void;
 }
@@ -41,6 +49,7 @@ export function RecordListSkeleton({ rows = 6 }: RecordListSkeletonProps) {
 
       <div className="overflow-x-auto">
         <div className={recordListGridClassName + ' border-b border-slate-300 bg-slate-50 px-5 py-3'}>
+          <div className="h-4 w-4 rounded bg-[#F1F5F9]" />
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="h-3 w-20 rounded-full bg-[#F1F5F9]" />
           ))}
@@ -49,6 +58,7 @@ export function RecordListSkeleton({ rows = 6 }: RecordListSkeletonProps) {
         <div>
           {Array.from({ length: rows }).map((_, index) => (
             <div key={index} className={recordListGridClassName + ' border-b border-slate-300 px-5 py-3'}>
+              <div className="h-4 w-4 rounded bg-[#F1F5F9]" />
               <div className="flex items-center gap-3">
                 <div className="h-11 w-11 rounded-full bg-[#F1F5F9]" />
                 <div className="min-w-0 flex-1">
@@ -88,14 +98,32 @@ export function RecordList({
   crmType,
   hasActiveFilters,
   isRefreshing = false,
+  selectedRecordIds,
+  allVisibleSelected,
+  someVisibleSelected,
+  isDeletingSelected = false,
   pagination,
   onPageChange,
   onPageSizeChange,
   onCreateRecord,
   onClearFilters,
+  onToggleSelectAllVisible,
+  onToggleRecordSelection,
+  onRequestDeleteSelected,
   onEditLead,
   onOpenAction,
 }: RecordListProps) {
+  const selectedCount = selectedRecordIds.size;
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!selectAllRef.current) {
+      return;
+    }
+
+    selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+  }, [allVisibleSelected, someVisibleSelected]);
+
   if (records.length === 0) {
     const emptyState = getWorkbenchEmptyState(crmType, hasActiveFilters);
     const EmptyIcon = hasActiveFilters ? SearchX : DatabaseZap;
@@ -137,6 +165,21 @@ export function RecordList({
           <h3 className="mt-2 font-display text-2xl text-slate-900">Compact queue view</h3>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
+          {selectedCount > 0 ? (
+            <>
+              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">
+                {selectedCount} selected
+              </span>
+              <button
+                type="button"
+                onClick={onRequestDeleteSelected}
+                disabled={isDeletingSelected}
+                className={buttonStyles('danger', 'sm')}
+              >
+                Delete selected
+              </button>
+            </>
+          ) : null}
           <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-700">
             {records.length} visible record{records.length === 1 ? '' : 's'}
           </span>
@@ -153,6 +196,16 @@ export function RecordList({
 
       <div className="overflow-x-auto">
         <div className={recordListGridClassName + ' border-b border-slate-300 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600'}>
+          <div className="flex items-center justify-center">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={(event) => onToggleSelectAllVisible(event.target.checked)}
+              aria-label="Select all visible records"
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+          </div>
           <div>Lead</div>
           <div>Phone</div>
           <div>Type</div>
@@ -170,6 +223,8 @@ export function RecordList({
               record={record}
               config={config}
               crmType={crmType}
+              isSelected={selectedRecordIds.has(record.id)}
+              onToggleSelect={onToggleRecordSelection}
               onEditLead={onEditLead}
               onOpenAction={onOpenAction}
             />

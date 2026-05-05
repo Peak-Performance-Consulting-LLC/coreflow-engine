@@ -18,6 +18,7 @@ import { useCrmWorkspace } from '../hooks/useCrmWorkspace';
 import {
   addRecordNote,
   createRecordTask,
+  deleteWorkspaceRecords,
   getCachedWorkspaceRecords,
   listWorkspaceRecords,
   moveRecordStage,
@@ -103,6 +104,9 @@ export function RecordsPage() {
   const [activeActionMode, setActiveActionMode] = useState<RecordQuickActionMode>(null);
   const [loading, setLoading] = useState(() => recordPage.items.length === 0 && recordPage.total === 0);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deletingRecords, setDeletingRecords] = useState(false);
   const isOwner = isWorkspaceOwner(workspace);
   const requestIdRef = useRef(0);
   const filtersRef = useRef(filters);
@@ -127,12 +131,32 @@ export function RecordsPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 
+  useEffect(() => {
+    const visibleIds = new Set(recordPage.items.map((record) => record.id));
+
+    setSelectedRecordIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+
+      const next = new Set([...current].filter((recordId) => visibleIds.has(recordId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [recordPage.items]);
+
   const metrics = useMemo(() => (config ? buildOperationalMetrics(recordPage.items, config) : []), [recordPage.items, config]);
   const activeFilterChips = useMemo(
     () => (config ? buildActiveFilterChips(filters, config) : []),
     [filters, config],
   );
   const hasActiveFilters = activeFilterChips.length > 0;
+  const visibleRecordIds = useMemo(() => recordPage.items.map((record) => record.id), [recordPage.items]);
+  const selectedVisibleRecordIds = useMemo(
+    () => visibleRecordIds.filter((recordId) => selectedRecordIds.has(recordId)),
+    [selectedRecordIds, visibleRecordIds],
+  );
+  const allVisibleSelected = visibleRecordIds.length > 0 && selectedVisibleRecordIds.length === visibleRecordIds.length;
+  const someVisibleSelected = selectedVisibleRecordIds.length > 0 && !allVisibleSelected;
   const guide = useMemo<AppPageGuide>(
     () => ({
       key: 'records-queue',
@@ -434,6 +458,45 @@ export function RecordsPage() {
     setPage(defaultPage);
   }
 
+  function handleToggleRecordSelection(recordId: string, checked: boolean) {
+    setSelectedRecordIds((current) => {
+      const next = new Set(current);
+
+      if (checked) {
+        next.add(recordId);
+      } else {
+        next.delete(recordId);
+      }
+
+      return next;
+    });
+  }
+
+  function handleToggleSelectAllVisible(checked: boolean) {
+    setSelectedRecordIds((current) => {
+      const next = new Set(current);
+
+      for (const recordId of visibleRecordIds) {
+        if (checked) {
+          next.add(recordId);
+        } else {
+          next.delete(recordId);
+        }
+      }
+
+      return next;
+    });
+  }
+
+  function handleRequestDeleteSelected() {
+    if (selectedVisibleRecordIds.length === 0) {
+      toast.error('Select at least one record to delete.');
+      return;
+    }
+
+    setIsDeleteConfirmOpen(true);
+  }
+
   function updateFilters(nextUpdater: (current: Omit<RecordListFilters, 'workspace_id'>) => Omit<RecordListFilters, 'workspace_id'>) {
     setFilters((current) => nextUpdater(current));
     setPage(defaultPage);
@@ -470,6 +533,37 @@ export function RecordsPage() {
   function handleRecordCreated() {
     setPage(defaultPage);
     void loadData(filtersRef.current, { page: defaultPage, pageSize: paginationRef.current.pageSize });
+  }
+
+  async function handleConfirmDeleteSelected() {
+    if (!session || !workspaceId || selectedVisibleRecordIds.length === 0) {
+      return;
+    }
+
+    setDeletingRecords(true);
+
+    try {
+      const result = await deleteWorkspaceRecords(session, {
+        workspace_id: workspaceId,
+        record_ids: selectedVisibleRecordIds,
+      });
+
+      setIsDeleteConfirmOpen(false);
+      setSelectedRecordIds(new Set());
+
+      if (result.deleted_count > 0) {
+        toast.success(`Deleted ${result.deleted_count} record${result.deleted_count === 1 ? '' : 's'}.`);
+      } else {
+        toast.error('No records were deleted.');
+      }
+
+      void loadData(filtersRef.current, paginationRef.current);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete records.';
+      toast.error(message);
+    } finally {
+      setDeletingRecords(false);
+    }
   }
 
   if (!workspace || !session || !workspaceId) {
@@ -671,6 +765,10 @@ export function RecordsPage() {
                 crmType={workspace.crmType}
                 hasActiveFilters={hasActiveFilters}
                 isRefreshing={refreshing}
+                selectedRecordIds={selectedRecordIds}
+                allVisibleSelected={allVisibleSelected}
+                someVisibleSelected={someVisibleSelected}
+                isDeletingSelected={deletingRecords}
                 pagination={recordPage}
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
@@ -679,6 +777,9 @@ export function RecordsPage() {
                   setFilters(defaultFilters);
                   setPage(defaultPage);
                 }}
+                onToggleSelectAllVisible={handleToggleSelectAllVisible}
+                onToggleRecordSelection={handleToggleRecordSelection}
+                onRequestDeleteSelected={handleRequestDeleteSelected}
                 onEditLead={handleOpenEditDrawer}
                 onOpenAction={handleOpenQuickAction}
               />
@@ -724,6 +825,47 @@ export function RecordsPage() {
           onCreateTask={handleCreateTask}
           onAssignOwner={handleAssignOwner}
         />
+      ) : null}
+
+      {isDeleteConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/55"
+            aria-label="Close delete confirmation"
+            onClick={() => {
+              if (!deletingRecords) {
+                setIsDeleteConfirmOpen(false);
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-600">Delete records</div>
+            <h3 className="mt-2 font-display text-2xl text-slate-900">Confirm bulk delete</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              You selected {selectedVisibleRecordIds.length} record{selectedVisibleRecordIds.length === 1 ? '' : 's'}.
+              This action cannot be undone.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={deletingRecords}
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                className={buttonStyles('secondary', 'sm')}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingRecords}
+                onClick={() => void handleConfirmDeleteSelected()}
+                className={buttonStyles('danger', 'sm')}
+              >
+                {deletingRecords ? 'Deleting...' : 'Confirm delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </WorkspaceLayout>
   );

@@ -27,12 +27,14 @@ import { cn } from '../../lib/utils';
 import type { RecordQuickActionMode } from './RecordQuickActionDrawer';
 
 export const recordListGridClassName =
-  'grid min-w-[1260px] grid-cols-[minmax(320px,2.35fr)_minmax(140px,1fr)_minmax(130px,0.9fr)_minmax(130px,0.9fr)_minmax(140px,1fr)_minmax(160px,1fr)_minmax(220px,1.15fr)_64px] items-center gap-4';
+  'grid min-w-[1308px] grid-cols-[44px_minmax(320px,2.35fr)_minmax(140px,1fr)_minmax(130px,0.9fr)_minmax(130px,0.9fr)_minmax(140px,1fr)_minmax(160px,1fr)_minmax(220px,1.15fr)_64px] items-center gap-4';
 
 interface RecordListItemProps {
   record: RecordSummary;
   config: CrmWorkspaceConfig;
   crmType: CRMType;
+  isSelected: boolean;
+  onToggleSelect: (recordId: string, checked: boolean) => void;
   onEditLead: (record: RecordSummary) => void;
   onOpenAction: (record: RecordSummary, mode: Exclude<RecordQuickActionMode, null>) => void;
 }
@@ -300,6 +302,8 @@ export function RecordListItem({
   record,
   config,
   crmType,
+  isSelected,
+  onToggleSelect,
   onEditLead,
   onOpenAction,
 }: RecordListItemProps) {
@@ -326,6 +330,16 @@ export function RecordListItem({
         'group border-b border-slate-300 px-5 py-3 text-[13px] transition-colors duration-150 hover:bg-slate-50 focus-within:bg-slate-50',
       )}
     >
+      <div className="flex items-center justify-center">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={(event) => onToggleSelect(record.id, event.target.checked)}
+          aria-label={`Select ${identity.title}`}
+          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+        />
+      </div>
+
       <div className="min-w-0">
         <div className="flex items-center gap-2.5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-accent-blue/25 bg-accent-blue/10 text-sm font-semibold text-accent-blue">
