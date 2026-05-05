@@ -7,12 +7,13 @@ import { SigninValuePanel } from '../components/auth/SigninValuePanel';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../hooks/useAuth';
+import { acceptWorkspaceInvite } from '../lib/auth-helpers';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { getDashboardPath } from '../lib/utils';
 
 export function InviteAcceptPage() {
   const navigate = useNavigate();
-  const { loading, workspaceLoading, user, workspace, refreshWorkspace } = useAuth();
+  const { loading, workspaceLoading, session, user, workspace, refreshWorkspace } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,7 +53,12 @@ export function InviteAcceptPage() {
         throw error;
       }
 
-      const nextWorkspace = await refreshWorkspace();
+      if (!session) {
+        throw new Error('Your invite session expired. Ask the workspace owner to resend the invite.');
+      }
+
+      const nextWorkspace = await acceptWorkspaceInvite(session);
+      await refreshWorkspace(session);
       if (!nextWorkspace) {
         throw new Error('Your password was saved, but the workspace invite could not be attached. Ask the workspace owner to resend the invite.');
       }

@@ -123,6 +123,24 @@ export async function completeSignup(payload: CompleteSignupPayload, session: Se
   return data.workspace;
 }
 
+export async function acceptWorkspaceInvite(session: Session) {
+  const client = getSupabaseClient();
+  const { data, error } = await client.functions.invoke<WorkspaceLookupResponse>('accept-workspace-invite', {
+    headers: getAuthHeaders(session),
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Unable to accept workspace invite.');
+  }
+
+  if (!data?.workspace) {
+    throw new Error('No pending workspace invite was found for this account.');
+  }
+
+  primeUserWorkspaceCache(session.user.id, data.workspace);
+  return data.workspace;
+}
+
 export async function completePendingSignupIfAvailable(
   session: Session,
   user: { user_metadata?: Record<string, unknown> | null } | null | undefined = session.user,
