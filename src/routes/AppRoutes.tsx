@@ -46,19 +46,19 @@ const EmailTemplatesPage = lazy(async () =>
 );
 const TeamPage = lazy(async () => import('../pages/TeamPage').then((module) => ({ default: module.TeamPage })));
 
-function withPageLoader(children: ReactNode) {
-  return <Suspense fallback={<FullPageLoader />}>{children}</Suspense>;
+function withPageLoader(children: ReactNode, variant: 'app' | 'auth' = 'app') {
+  return <Suspense fallback={<FullPageLoader variant={variant} />}>{children}</Suspense>;
 }
 
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={withPageLoader(<HomePage />)} />
-      <Route path="/invite/accept" element={withPageLoader(<InviteAcceptPage />)} />
+      <Route path="/invite/accept" element={withPageLoader(<InviteAcceptPage />, 'auth')} />
 
       <Route element={<PublicOnlyRoute />}>
         <Route path="/signin" element={withPageLoader(<SignInPage />)} />
-        <Route path="/signup" element={withPageLoader(<SignUpPage />)} />
+        <Route path="/signup" element={withPageLoader(<SignUpPage />, 'auth')} />
       </Route>
 
       <Route element={<ProtectedRoute allowWithoutWorkspace />}>
