@@ -14,7 +14,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
 import { ConfigurationNotice } from '../ui/ConfigurationNotice';
 import { Input } from '../ui/Input';
-import { SignupStepIndicator } from './SignupStepIndicator';
 
 type FormErrors = Partial<
   Record<
@@ -227,22 +226,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="relative space-y-3.5" onSubmit={handleSubmit}>
-      <motion.div
-        className="pointer-events-none absolute -right-2 -top-3 hidden h-16 w-16 sm:block"
-        animate={{ rotate: [0, 10, -8, 0], scale: [1, 1.05, 0.98, 1] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-      >
-        <motion.span
-          className="absolute inset-3 rounded-full border border-indigo-200"
-          animate={{ scale: [0.8, 1.35], opacity: [0.55, 0] }}
-          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-        />
-        <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 shadow-glow" />
-        <Sparkles className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
-      </motion.div>
-
-      {!inviteMode ? <SignupStepIndicator currentStep={step} /> : null}
+    <form className="relative space-y-5" onSubmit={handleSubmit}>
 
       {!isSupabaseReady ? <ConfigurationNotice /> : null}
 
@@ -256,17 +240,17 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="space-y-3.5"
+              className="space-y-4"
               >
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                 >
-                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-700">
                   {inviteMode ? 'Join workspace' : 'Account details'}
                 </h2>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-sm text-slate-600">
                   {inviteMode
                     ? 'Create your login with the invited email address, then CoreFlow will attach your workspace automatically.'
                     : 'Add your personal login details first.'}
@@ -280,6 +264,7 @@ export function SignUpForm() {
               >
                 <Input
                   label="Full name"
+                  fieldSize="lg"
                   placeholder="Jordan Lee"
                   autoComplete="name"
                   value={fullName}
@@ -295,6 +280,7 @@ export function SignUpForm() {
               >
                 <Input
                   label="Email"
+                  fieldSize="lg"
                   type="email"
                   placeholder="you@company.com"
                   autoComplete="email"
@@ -313,6 +299,7 @@ export function SignUpForm() {
               >
                 <Input
                   label="Password"
+                  fieldSize="lg"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Create a password"
                   autoComplete="new-password"
@@ -332,6 +319,7 @@ export function SignUpForm() {
                 />
                 <Input
                   label="Confirm password"
+                  fieldSize="lg"
                   type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="Repeat your password"
                   autoComplete="new-password"
@@ -358,7 +346,7 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="relative overflow-hidden rounded-[26px] border border-indigo-100 bg-white/75 p-4 shadow-panel backdrop-blur-md"
+              className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white/88 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm"
             >
               <motion.div
                 className="pointer-events-none absolute -right-14 -top-16 h-36 w-36 rounded-full bg-gradient-to-br from-fuchsia-300/25 to-cyan-300/25 blur-3xl"
@@ -383,6 +371,7 @@ export function SignUpForm() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input
                     label="Workspace name"
+                    fieldSize="lg"
                     placeholder="CoreFlow Ventures"
                     value={workspaceName}
                     onChange={(event) => updateWorkspaceName(event.target.value)}
@@ -390,6 +379,7 @@ export function SignUpForm() {
                   />
                   <Input
                     label="Workspace slug"
+                    fieldSize="lg"
                     placeholder="coreflow-ventures"
                     value={workspaceSlug}
                     onChange={(event) => {
@@ -609,7 +599,7 @@ export function SignUpForm() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         {step === 2 && !inviteMode ? (
           <motion.button
@@ -627,8 +617,8 @@ export function SignUpForm() {
         )}
         <Button
           type="submit"
-          size="sm"
-          className="w-full sm:w-auto group relative h-8 overflow-hidden px-4 text-xs disabled:hover:bg-indigo-600"
+          size="md"
+          className="w-full sm:w-auto group relative h-11 overflow-hidden rounded-xl px-5 text-sm font-semibold disabled:hover:bg-indigo-600"
           loading={loading}
           disabled={!inviteMode && step === 2 && !crmType}
           title={!inviteMode && step === 2 && !crmType ? 'Select a CRM mode before starting your workspace.' : undefined}
@@ -645,7 +635,7 @@ export function SignUpForm() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
+        className="border-t border-slate-200 pt-4 text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
       >
         {inviteMode ? 'Workspace access will be attached automatically after sign up' : 'No credit card required | Takes less than a minute'}
       </motion.p>

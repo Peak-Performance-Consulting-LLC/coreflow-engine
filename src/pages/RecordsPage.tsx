@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CalendarDays, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppPageGuide } from '../context/AppGuideContext';
-import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { RecordCreateDrawer } from '../components/records/RecordCreateDrawer';
 import { RecordEditDrawer } from '../components/records/RecordEditDrawer';
@@ -26,7 +26,7 @@ import {
 } from '../lib/crm-service';
 import type { RecordListFilters, RecordListPageResult, RecordListQuery, RecordSummary } from '../lib/crm-types';
 import { buildActiveFilterChips, buildOperationalMetrics } from '../lib/record-workbench';
-import { formatCrmLabel, isWorkspaceOwner } from '../lib/utils';
+import { formatCrmLabel } from '../lib/utils';
 
 const defaultFilters: Omit<RecordListFilters, 'workspace_id'> = {
   search: '',
@@ -107,7 +107,6 @@ export function RecordsPage() {
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [deletingRecords, setDeletingRecords] = useState(false);
-  const isOwner = isWorkspaceOwner(workspace);
   const requestIdRef = useRef(0);
   const filtersRef = useRef(filters);
   const paginationRef = useRef({ page: defaultPage, pageSize: defaultPageSize });
@@ -151,6 +150,27 @@ export function RecordsPage() {
   );
   const hasActiveFilters = activeFilterChips.length > 0;
   const visibleRecordIds = useMemo(() => recordPage.items.map((record) => record.id), [recordPage.items]);
+  const metricCards = useMemo(() => metrics.slice(0, 4), [metrics]);
+  const activeQueueTab = useMemo(() => {
+    if (filters.include_archived) {
+      return 'archived';
+    }
+
+    if (filters.status) {
+      return filters.status;
+    }
+
+    return 'all';
+  }, [filters.include_archived, filters.status]);
+  const todayLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+      }),
+    [],
+  );
   const selectedVisibleRecordIds = useMemo(
     () => visibleRecordIds.filter((recordId) => selectedRecordIds.has(recordId)),
     [selectedRecordIds, visibleRecordIds],
@@ -572,35 +592,32 @@ export function RecordsPage() {
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-5">
-        <PageHeader
-          eyebrow={`${formatCrmLabel(workspace.crmType)} work queue`}
-          title="Records"
-          description="Review records, triage follow-ups, and manage owner assignments from a single operational queue."
-          actions={(
-            <>
-              <Link to="/imports" className={buttonStyles('secondary', 'sm')} data-guide-id="records-import-button">
-                Import records
-              </Link>
-              {isOwner ? (
-                <Link to="/records/form-builder" className={buttonStyles('secondary', 'sm')}>
-                  Form Builder
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                onClick={handleOpenCreateDrawer}
-                className={buttonStyles('primary', 'sm')}
-                data-guide-id="records-create-button"
-              >
-                Create record
-              </button>
-            </>
-          )}
-        />
+      <div className="space-y-5 rounded-[28px] border border-[#dce0ea] bg-[#f3f5fb] p-4 shadow-[0_10px_28px_-20px_rgba(33,44,78,0.28)] sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#546190]">{formatCrmLabel(workspace.crmType)} workspace</div>
+            <h1 className="mt-1 font-display text-[44px] leading-[1.02] tracking-tight text-[#1c2a3d]">Records</h1>
+            <p className="mt-2 text-sm font-medium text-[#667086]">Premium queue view with the same data, cleaner control, and faster daily triage.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d9deea] bg-white px-3.5 text-sm font-semibold text-[#4f586e] shadow-sm">
+              <CalendarDays className="h-4 w-4" />
+              {todayLabel}
+            </span>
+            <button
+              type="button"
+              onClick={handleOpenCreateDrawer}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[#4c39df] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_-12px_rgba(76,57,223,0.68)] transition hover:bg-[#412fd0]"
+              data-guide-id="records-create-button"
+            >
+              <Plus className="h-4 w-4" />
+              Add Record
+            </button>
+          </div>
+        </div>
 
         {configRefreshing ? (
-          <Card className="p-4 text-sm text-slate-600">Refreshing workspace config in the background...</Card>
+          <Card className="border border-[#d9deea] bg-white p-4 text-sm font-medium text-[#4f586e] shadow-none">Refreshing workspace config in the background...</Card>
         ) : null}
 
         {configError && !config ? (
@@ -608,14 +625,22 @@ export function RecordsPage() {
         ) : null}
 
         {config ? (
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
-            {metrics.map((metric) => (
-              <Card key={metric.label} className="p-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-slate-500">{metric.label}</div>
-                <div className="mt-3 font-display text-3xl text-slate-900">{metric.value}</div>
-                <p className="mt-2 text-sm text-slate-600">{metric.hint}</p>
-              </Card>
-            ))}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {metricCards.map((metric) => {
+              const trendValue = recordPage.total > 0 ? (metric.value / recordPage.total) * 100 : 0;
+
+              return (
+                <Card key={metric.label} className="border border-[#d9deea] bg-white p-5 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5f687f]">{metric.label}</div>
+                    <span className="rounded-full bg-[#edf0f6] px-2.5 py-1 text-[11px] font-semibold text-[#7a8297]">
+                      +{trendValue.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="mt-5 font-display text-4xl font-semibold tracking-tight text-[#1f2b3f]">{metric.value.toLocaleString()}</div>
+                </Card>
+              );
+            })}
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -625,42 +650,43 @@ export function RecordsPage() {
         )}
 
         {config ? (
-          <div className="p-5 bg-transparent">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h3 className="font-display text-2xl text-slate-900">Daily queue filters</h3>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-700">
-                    {hasActiveFilters ? `${activeFilterChips.length} active filters` : 'All records'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilters(defaultFilters);
-                      setPage(defaultPage);
-                    }}
-                    className="rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-700 transition hover:text-slate-900"
-                  >
-                    Reset filters
-                  </button>
-                </div>
+          <Card className="border border-[#d9deea] bg-white p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-5 border-b border-[#e4e8f1] px-5 py-3">
+                {[
+                  { key: 'all', label: 'All Records', status: null, includeArchived: false },
+                  { key: 'open', label: 'Active', status: 'open', includeArchived: false },
+                  { key: 'qualified', label: 'Qualified', status: 'qualified', includeArchived: false },
+                  { key: 'nurturing', label: 'Nurturing', status: 'nurturing', includeArchived: false },
+                  { key: 'closed', label: 'Closed', status: 'closed', includeArchived: false },
+                  { key: 'archived', label: 'Archived', status: null, includeArchived: true },
+                ].map((tab) => {
+                  const isActive = activeQueueTab === tab.key;
+
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() =>
+                        updateFilters((current) => ({
+                          ...current,
+                          status: tab.status,
+                          include_archived: tab.includeArchived,
+                        }))
+                      }
+                      className={
+                        isActive
+                          ? 'border-b-2 border-[#4c39df] px-0.5 py-1 text-xs font-semibold text-[#4c39df]'
+                          : 'border-b-2 border-transparent px-0.5 py-1 text-xs font-semibold text-[#747c90] transition hover:text-[#50576c]'
+                      }
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  <input
-                    value={filters.search}
-                    data-guide-id="records-search-input"
-                    onChange={(event) =>
-                      updateFilters((current) => ({
-                        ...current,
-                        search: event.target.value,
-                      }))
-                    }
-                    placeholder="Search title, contact, company, email"
-                    className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  />
+              <div className="grid gap-3 px-5 pb-4 md:grid-cols-2 xl:grid-cols-4">
                 <select
                   value={filters.stage_id ?? ''}
                   onChange={(event) =>
@@ -669,7 +695,7 @@ export function RecordsPage() {
                       stage_id: event.target.value || null,
                     }))
                   }
-                  className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All stages</option>
                   {config.pipelines.flatMap((pipeline) =>
@@ -688,7 +714,7 @@ export function RecordsPage() {
                       source_id: event.target.value || null,
                     }))
                   }
-                  className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All sources</option>
                   {config.sources.map((source) => (
@@ -702,7 +728,7 @@ export function RecordsPage() {
                   onChange={(event) =>
                     updateFilters((current) => ({ ...current, assignee_user_id: event.target.value || null }))
                   }
-                  className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All owners</option>
                   {config.assignees.map((assignee) => (
@@ -711,22 +737,16 @@ export function RecordsPage() {
                     </option>
                   ))}
                 </select>
-                <select
-                  value={filters.status ?? ''}
-                  onChange={(event) =>
-                    updateFilters((current) => ({
-                      ...current,
-                      status: event.target.value || null,
-                    }))
-                  }
-                  className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilters(defaultFilters);
+                    setPage(defaultPage);
+                  }}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-transparent bg-transparent px-4 text-sm font-semibold text-[#7a8094] transition hover:bg-[#f2f4f8] hover:text-[#565c70]"
                 >
-                  <option value="">All statuses</option>
-                  <option value="open">Open</option>
-                  <option value="qualified">Qualified</option>
-                  <option value="nurturing">Nurturing</option>
-                  <option value="closed">Closed</option>
-                </select>
+                  Reset filters
+                </button>
               </div>
 
               {activeFilterChips.length > 0 ? (
@@ -739,9 +759,10 @@ export function RecordsPage() {
                         updateFilters((current) => ({
                           ...current,
                           [chip.key]: chip.key === 'search' ? '' : null,
+                          include_archived: chip.key === 'status' ? false : current.include_archived,
                         }))
                       }
-                      className="rounded-full border border-accent-blue/25 bg-accent-blue/10 px-3 py-1 text-xs text-accent-blue transition hover:border-cyan-200/40"
+                      className="ml-5 rounded-md border border-[#dce1ee] bg-[#f4f6fa] px-3 py-1 text-xs font-semibold text-[#5d6680] transition hover:border-[#cbd2e3]"
                     >
                       {chip.label}: {chip.value} x
                     </button>
@@ -749,7 +770,7 @@ export function RecordsPage() {
                 </div>
               ) : null}
             </div>
-          </div>
+          </Card>
         ) : (
           <SectionSkeleton title="Queue filters" rows={3} />
         )}

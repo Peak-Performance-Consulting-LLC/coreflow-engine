@@ -1,7 +1,6 @@
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { completePendingSignupIfAvailable } from '../../lib/auth-helpers';
 import { getConfiguredSupabaseProjectRef, getSupabaseClient } from '../../lib/supabaseClient';
@@ -153,30 +152,12 @@ export function SignInForm() {
   }
 
   return (
-    <form className="relative space-y-4" onSubmit={handleSubmit}>
-      <motion.div
-        className="pointer-events-none absolute -right-2 -top-4 hidden h-20 w-20 sm:block"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-      >
-        <motion.span
-          className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.65)]"
-          animate={{ scale: [1, 1.45, 1], opacity: [0.65, 1, 0.65] }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <span className="absolute inset-3 rounded-full border border-dashed border-indigo-200" />
-        <motion.span
-          className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 shadow-glow"
-          animate={{ rotate: [0, -360] }}
-          transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-        />
-        <LogIn className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-white" />
-      </motion.div>
-
+    <form className="space-y-7" onSubmit={handleSubmit}>
       {!isSupabaseReady ? <ConfigurationNotice /> : null}
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <Input
           label="Email"
+          fieldSize="lg"
           type="email"
           data-guide-id="sign-in-email"
           placeholder="you@company.com"
@@ -187,6 +168,7 @@ export function SignInForm() {
         />
         <Input
           label="Password"
+          fieldSize="lg"
           type={showPassword ? 'text' : 'password'}
           data-guide-id="sign-in-password"
           placeholder="Enter your password"
@@ -206,13 +188,13 @@ export function SignInForm() {
         />
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <label className="inline-flex items-center gap-2.5 text-xs text-slate-700">
+      <div className="flex items-center justify-between gap-3">
+        <label className="inline-flex items-center gap-2.5 text-xs text-slate-600">
           <input
             type="checkbox"
             checked={rememberMe}
             onChange={(event) => setRememberMe(event.target.checked)}
-            className="h-4 w-4 rounded border-indigo-200 bg-white text-accent-blue focus:ring-accent-blue"
+            className="h-4 w-4 rounded border-indigo-200 bg-white text-indigo-600 focus:ring-indigo-500"
           />
           Remember me
         </label>
@@ -225,23 +207,22 @@ export function SignInForm() {
         </button>
       </div>
 
-      <Button type="submit" size="sm" className="group relative h-8 w-full overflow-hidden text-xs" loading={loading}>
-        <span className="relative z-10">Sign In</span>
-        <LogIn className="relative z-10 h-4 w-4 transition-transform group-hover:translate-x-1" />
-        <span className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-indigo-600 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <Button
+        type="submit"
+        size="md"
+        className="h-11 w-full rounded-lg border-indigo-700 bg-indigo-700 text-base font-semibold hover:bg-indigo-800 active:bg-indigo-900"
+        loading={loading}
+      >
+        <span>Sign In</span>
+        <LogIn className="h-4 w-4" />
       </Button>
 
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35 }}
-        className="text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500"
-      >
+      <p className="border-t border-slate-200 pt-4 text-center text-[10px] uppercase leading-4 tracking-[0.16em] text-slate-500">
         Secure workspace routing | Session restored automatically
-      </motion.p>
+      </p>
 
       {!hideSignUpOption ? (
-        <p className="text-center text-xs leading-4 text-slate-600">
+        <p className="text-center text-sm leading-6 text-slate-700">
           New to CoreFlow?{' '}
           <Link
             to={inviteMode ? `/signup?invite=1&email=${encodeURIComponent(email.trim() || invitedEmail)}` : '/signup'}

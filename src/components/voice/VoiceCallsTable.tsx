@@ -1,9 +1,10 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { VoiceOpsCallRecord } from '../../lib/voice-ops-service';
 import { Card } from '../ui/Card';
 
 function formatDateTime(value: string | null) {
   if (!value) {
-    return '—';
+    return '-';
   }
 
   return new Intl.DateTimeFormat(undefined, {
@@ -13,19 +14,23 @@ function formatDateTime(value: string | null) {
 }
 
 function badgeClass(value: string | null) {
-  if (value === 'lead_created' || value === 'resolved') {
-    return 'border-indigo-300 bg-[#EEF2FF] text-slate-700';
+  if (value === 'lead_created') {
+    return 'border-[#cde7d1] bg-[#edf9ee] text-[#4a9c5b]';
+  }
+
+  if (value === 'resolved') {
+    return 'border-[#d6deec] bg-[#f4f6fb] text-[#6e778f]';
   }
 
   if (value === 'open' || value === 'review_needed' || value === 'gather_incomplete') {
-    return 'border-indigo-200 bg-[#EEF2FF] text-slate-700';
+    return 'border-[#f5dfb7] bg-[#fff8ea] text-[#b0792a]';
   }
 
   if (value === 'crm_failed' || value === 'mapping_failed' || value === 'ended_without_lead' || value === 'failed') {
-    return 'border-rose-200 bg-rose-50 text-rose-700';
+    return 'border-[#f1c7cc] bg-[#fff2f3] text-[#b9505f]';
   }
 
-  return 'border-slate-300 bg-slate-50 text-slate-700';
+  return 'border-[#d6deec] bg-[#f4f6fb] text-[#6e778f]';
 }
 
 interface VoiceCallsTableProps {
@@ -47,111 +52,93 @@ export function VoiceCallsTable({
   loading,
   selectedCallId,
   page,
-  pageSize,
   total,
   hasNextPage,
   hasPrevPage,
   onSelect,
   onPageChange,
-  onPageSizeChange,
 }: VoiceCallsTableProps) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = total === 0 ? 0 : Math.min(total, page * pageSize);
-
   return (
-    <Card className="overflow-hidden p-0">
-      <div className="border-b border-slate-300 px-5 py-4">
-        <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Voice queue</div>
-        <div className="mt-2 text-sm text-slate-700">Every inbound call is visible here, whether it created a lead or needs review.</div>
+    <Card className="overflow-hidden border border-[#d9deea] bg-white p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+      <div className="border-b border-[#e4e8f1] px-5 py-4">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5f687f]">Voice queue</div>
+        <div className="mt-1 text-xs text-[#8a92a7]">Every inbound call is visible here, whether it created a lead or needs review.</div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-[14px]">
-          <thead className="bg-white text-slate-700">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-[#f7f8fc] text-[#6a7288]">
             <tr>
-              <th className="px-5 py-3 font-semibold">Caller</th>
-              <th className="px-5 py-3 font-semibold">Number</th>
-              <th className="px-5 py-3 font-semibold">Assistant</th>
-              <th className="px-5 py-3 font-semibold">Outcome</th>
-              <th className="px-5 py-3 font-semibold">Review</th>
-              <th className="px-5 py-3 font-semibold">Gather</th>
-              <th className="px-5 py-3 font-semibold">Created</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Caller</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Number</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Assistant</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Outcome</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Review</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Gather</th>
+              <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Created</th>
             </tr>
           </thead>
           <tbody>
             {calls.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-slate-600">
+                <td colSpan={7} className="px-5 py-10 text-center text-[#6f778d]">
                   {loading ? 'Loading calls...' : 'No voice calls match these filters yet.'}
                 </td>
               </tr>
-            ) : calls.map((call) => (
-              <tr
-                key={call.id}
-                onClick={() => onSelect(call.id)}
-                className={`cursor-pointer border-t border-slate-300 transition hover:bg-white ${
-                  selectedCallId === call.id ? 'bg-white' : ''
-                }`}
-              >
-                <td className="px-5 py-4 align-top">
-                  <div className="font-medium text-slate-900">{call.from_number_e164}</div>
-                </td>
-                <td className="px-5 py-4 align-top text-slate-700">{call.phone_number_e164_label ?? call.to_number_e164}</td>
-                <td className="px-5 py-4 align-top text-slate-700">{call.voice_agent_name ?? 'Phase 1 flow'}</td>
-                <td className="px-5 py-4 align-top">
-                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${badgeClass(call.outcome_status)}`}>
-                    {call.outcome_status ?? 'pending'}
-                  </span>
-                </td>
-                <td className="px-5 py-4 align-top">
-                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${badgeClass(call.review_status)}`}>
-                    {call.review_status}
-                  </span>
-                </td>
-                <td className="px-5 py-4 align-top text-slate-700">{call.gather_status}</td>
-                <td className="px-5 py-4 align-top text-slate-600">{formatDateTime(call.created_at)}</td>
-              </tr>
-            ))}
+            ) : (
+              calls.map((call) => (
+                <tr
+                  key={call.id}
+                  onClick={() => onSelect(call.id)}
+                  className={`cursor-pointer border-t border-[#eceff6] transition hover:bg-[#f7f8fc] ${
+                    selectedCallId === call.id ? 'bg-[#f7f8fc]' : ''
+                  }`}
+                >
+                  <td className="px-5 py-4 align-top">
+                    <div className="font-semibold text-[#2f3a54]">{call.from_number_e164}</div>
+                  </td>
+                  <td className="px-5 py-4 align-top text-[#5f6780]">{call.phone_number_e164_label ?? call.to_number_e164}</td>
+                  <td className="px-5 py-4 align-top text-[#5f6780]">{call.voice_agent_name ?? 'Phase 1 flow'}</td>
+                  <td className="px-5 py-4 align-top">
+                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${badgeClass(call.outcome_status)}`}>
+                      {call.outcome_status ?? 'pending'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 align-top">
+                    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${badgeClass(call.review_status)}`}>
+                      {call.review_status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 align-top text-[#6f778d]">{call.gather_status}</td>
+                  <td className="px-5 py-4 align-top text-[#5f6780]">{formatDateTime(call.created_at)}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-slate-300 px-5 py-4 text-sm text-slate-700 md:flex-row md:items-center md:justify-between">
-        <div>
-          Showing {start}-{end} of {total} calls
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2">
-            <span className="text-slate-600">Rows</span>
-            <select
-              value={pageSize}
-              onChange={(event) => onPageSizeChange(Number(event.target.value) || 25)}
-              className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-slate-900 outline-none"
-              disabled={loading}
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-          </label>
-          <div className="text-slate-600">Page {page} of {totalPages}</div>
+      <div className="flex items-center justify-between border-t border-[#e4e8f1] px-5 py-3 text-xs text-[#6f778d]">
+        <div>Showing {calls.length} of {total} inbound calls</div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onPageChange(page - 1)}
             disabled={!hasPrevPage || loading}
-            className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#7a8297] transition hover:bg-[#f1f3f8] disabled:opacity-50"
           >
-            Previous
+            <ChevronLeft className="h-4 w-4" />
           </button>
+          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-[#eef1f7] px-2 text-[11px] font-semibold text-[#5f6780]">
+            {page}
+          </span>
           <button
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={!hasNextPage || loading}
-            className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#7a8297] transition hover:bg-[#f1f3f8] disabled:opacity-50"
           >
-            Next
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@
 import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import type { ReactNode } from 'react';
+import { Headphones } from 'lucide-react';
 import { crmOptions } from '../../lib/constants';
 import { AnimatedBackground } from '../ui/AnimatedBackground';
 import { LogoMark } from '../ui/LogoMark';
@@ -15,6 +16,7 @@ interface AuthLayoutProps {
   footer: ReactNode;
   leftPanel?: ReactNode;
   rightPanelClassName?: string;
+  layoutVariant?: 'default' | 'signin';
 }
 
 const smoothEase = [0.21, 0.47, 0.32, 0.98] as const;
@@ -47,6 +49,7 @@ export function AuthLayout({
   footer,
   leftPanel,
   rightPanelClassName,
+  layoutVariant = 'default',
 }: AuthLayoutProps) {
   const { scrollY } = useScroll();
   const leftPanelFollowY = useSpring(useTransform(scrollY, [0, 900], [0, 96]), {
@@ -54,6 +57,53 @@ export function AuthLayout({
     damping: 22,
     mass: 0.4,
   });
+
+  if (layoutVariant === 'signin') {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-[#f7f8fb]">
+        <div className="grid h-full w-full overflow-hidden bg-[#f7f8fb] lg:grid-cols-[1.06fr_1fr]">
+          <section className="flex items-stretch px-6 py-24 sm:px-12 lg:px-16">
+            <div className="flex min-h-full w-full max-w-[560px] flex-col">
+              <div className="space-y-3">
+                <div className="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">
+                  {eyebrow}
+                </div>
+                <h1 className="font-display text-[2.7rem] font-semibold leading-[1.14] tracking-tight text-slate-950">
+                  {title}
+                </h1>
+                <p className="max-w-[480px] text-lg leading-8 text-slate-600">{description}</p>
+              </div>
+              <div className="mt-7 flex-1">{children}</div>
+              <div className="mt-auto border-t border-slate-200 pt-4 text-center text-sm leading-7 text-slate-700">
+                {footer}
+              </div>
+            </div>
+          </section>
+
+          <aside
+            className="relative hidden overflow-hidden px-6 py-14 bg-cover bg-right bg-no-repeat sm:px-12 lg:block lg:px-16"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(18,22,45,0.46), rgba(45,38,95,0.56)), url('/images/crm-office-signin.png')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center right',
+              backgroundRepeat: 'no-repeat',
+            }}
+          >
+            <div className="absolute right-6 top-14 z-20 sm:right-12 lg:right-16">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
+                <Headphones className="h-4 w-4" />
+                Support
+              </div>
+            </div>
+            <div className="relative z-10 flex h-full flex-col">
+              <div className="flex h-full flex-col">{leftPanel}</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">

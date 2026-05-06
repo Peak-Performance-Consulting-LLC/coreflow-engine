@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, PhoneCall, RefreshCcw, Waves } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, PhoneCall, RefreshCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppPageGuide } from '../context/AppGuideContext';
-import { PageHeader } from '../components/dashboard/PageHeader';
 import { WorkspaceLayout } from '../components/dashboard/WorkspaceLayout';
 import { VoiceCallDetailDrawer } from '../components/voice/VoiceCallDetailDrawer';
 import { VoiceCallFilters, type VoiceCallFilterState } from '../components/voice/VoiceCallFilters';
 import { VoiceCallsTable } from '../components/voice/VoiceCallsTable';
-import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { FullPageLoader } from '../components/ui/FullPageLoader';
 import { useAuth } from '../hooks/useAuth';
@@ -254,58 +252,72 @@ export function VoiceOpsPage() {
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-5">
-        <PageHeader
-          eyebrow="Voice operations"
-          title="Inbound call queue"
-          description="Inspect inbound calls, resolve review-needed outcomes, and retry failed automations without leaving your workspace."
-          actions={(
-            <>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                data-guide-id="voice-ops-refresh"
-                onClick={() => void loadCalls({ nextSelectedCallId: selectedCallId })}
-                loading={listLoading}
+      <div className="space-y-5 rounded-[28px] border border-[#d9deea] bg-[#f3f5fb] p-4 shadow-[0_10px_28px_-20px_rgba(33,44,78,0.28)] sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-sm font-medium text-[#7a8196]">
+              Voice Operations <span className="mx-2 text-[#b0b6c6]">|</span> <span className="text-[#4c39df]">Inbound call queue</span>
+            </div>
+            <h1 className="mt-1 font-display text-[44px] leading-[1.02] tracking-tight text-[#1c2a3d]">Inbound call queue</h1>
+            <p className="mt-2 max-w-3xl text-sm font-medium text-[#667086]">
+              Inspect inbound calls, resolve review-needed outcomes, and retry failed automations without leaving your workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-guide-id="voice-ops-refresh"
+              onClick={() => void loadCalls({ nextSelectedCallId: selectedCallId })}
+              disabled={listLoading}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d9deea] bg-white px-4 text-sm font-semibold text-[#4f586e] shadow-sm transition hover:bg-[#f6f8fc] disabled:opacity-60"
+            >
+              <RefreshCcw className={`h-4 w-4 ${listLoading ? 'animate-spin' : ''}`} />
+              Refresh queue
+            </button>
+            {isOwner ? (
+              <Link
+                to="/voice/numbers"
+                className="inline-flex h-10 items-center rounded-lg bg-[#4c39df] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_-12px_rgba(76,57,223,0.68)] transition hover:bg-[#412fd0]"
               >
-                <RefreshCcw className="h-4 w-4" />
-                Refresh queue
-              </Button>
-              {isOwner ? (
-                <Link
-                  to="/voice/numbers"
-                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Voice workspace
-                </Link>
-              ) : null}
-            </>
-          )}
-        />
+                Voice workspace
+              </Link>
+            ) : null}
+          </div>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <PhoneCall className="h-4 w-4 text-indigo-500" />
-              Calls loaded
+          <Card className="border border-[#d9deea] bg-white p-5 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+            <div className="flex items-start justify-between">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#efeefe] text-[#4c39df]">
+                <PhoneCall className="h-4 w-4" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8f97ab]">Live view</span>
             </div>
-            <div className="mt-2 font-display text-3xl text-slate-900">{listData?.total ?? 0}</div>
+            <div className="mt-3 text-sm font-medium text-[#667086]">Calls loaded</div>
+            <div className="mt-1 font-display text-4xl font-semibold tracking-tight text-[#1f2b3f]">{listData?.total ?? 0}</div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <AlertTriangle className="h-4 w-4 text-indigo-500" />
-              Open review
+
+          <Card className="border border-[#d9deea] bg-white p-5 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+            <div className="flex items-start justify-between">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#fff4e7] text-[#d28626]">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#d28626]">Action needed</span>
             </div>
-            <div className="mt-2 font-display text-3xl text-slate-900">{openReviewCount}</div>
+            <div className="mt-3 text-sm font-medium text-[#667086]">Open review</div>
+            <div className="mt-1 font-display text-4xl font-semibold tracking-tight text-[#1f2b3f]">{openReviewCount}</div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
-              <Waves className="h-4 w-4 text-indigo-500" />
-              Leads created
+
+          <Card className="border border-[#d9deea] bg-white p-5 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+            <div className="flex items-start justify-between">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#edf9ee] text-[#4a9c5b]">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#4a9c5b]">Growth</span>
             </div>
-            <div className="mt-2 font-display text-3xl text-slate-900">{leadCount}</div>
-            <div className="mt-1 text-xs text-slate-500">Other non-success outcomes in view: {failedCount}</div>
+            <div className="mt-3 text-sm font-medium text-[#667086]">Leads created</div>
+            <div className="mt-1 font-display text-4xl font-semibold tracking-tight text-[#1f2b3f]">{leadCount}</div>
+            <div className="mt-1 text-xs font-medium text-[#8a92a7]">{failedCount} non-success outcomes in view</div>
           </Card>
         </div>
 

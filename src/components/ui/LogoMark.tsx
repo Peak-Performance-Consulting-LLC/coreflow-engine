@@ -31,7 +31,7 @@ export function LogoMark({ className, showSubtitle = true, theme = 'light' }: Lo
       <div>
         <div className={cn('font-display text-[15px] font-semibold leading-tight', isDark ? 'text-white' : 'text-slate-900')}>CoreFlow</div>
         {showSubtitle ? (
-          <div className={cn('text-[10px] uppercase tracking-widest', isDark ? 'text-slate-500' : 'text-slate-400')}>Shared CRM Platform</div>
+          <div className={cn('text-[10px] uppercase tracking-widest', isDark ? 'text-white/75' : 'text-slate-400')}>Shared CRM Platform</div>
         ) : null}
       </div>
     </div>

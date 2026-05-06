@@ -1,5 +1,5 @@
+import { Filter } from 'lucide-react';
 import type { VoiceCallListQuery, VoiceOpsCallRecord } from '../../lib/voice-ops-service';
-import { Button } from '../ui/Button';
 
 export interface VoiceCallFilterState {
   outcome_status: '' | VoiceCallListQuery['outcome_status'];
@@ -33,93 +33,106 @@ export function VoiceCallFilters({ filters, calls, loading, onChange, onReset }:
     ).entries(),
   );
 
+  const selectClassName =
+    'h-10 w-full rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] outline-none focus:border-[#bdc4d8]';
+
   return (
-    <div className="p-5 bg-transparent">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+    <div className="rounded-2xl border border-[#d9deea] bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Filter className="mt-0.5 h-3.5 w-3.5 text-[#8c93a6]" />
           <div>
-            <div className="text-xs uppercase tracking-[0.28em] text-accent-blue">Filters</div>
-            <div className="mt-2 text-sm text-slate-700">Slice the inbound queue by outcome, review state, agent, and number.</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#667086]">Filters</div>
+            <div className="mt-1 text-xs text-[#8a92a7]">Slice the inbound queue by outcome, review state, agent, and number.</div>
           </div>
-          <Button type="button" variant="ghost" size="sm" onClick={onReset} disabled={loading}>
-            Reset
-          </Button>
         </div>
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={loading}
+          className="text-xs font-semibold text-[#4c39df] transition hover:text-[#3f31bc] disabled:opacity-60"
+        >
+          Reset all
+        </button>
+      </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <label className="space-y-2 text-sm text-slate-800">
-            <span className="font-semibold">Outcome</span>
-            <select
-              value={filters.outcome_status ?? ''}
-              onChange={(event) => onChange({ outcome_status: event.target.value as VoiceCallFilterState['outcome_status'] })}
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All outcomes</option>
-              <option value="lead_created">Lead created</option>
-              <option value="crm_failed">CRM failed</option>
-              <option value="gather_incomplete">Gather incomplete</option>
-              <option value="mapping_failed">Mapping failed</option>
-              <option value="ended_without_lead">Ended without lead</option>
-              <option value="review_needed">Review needed</option>
-            </select>
-          </label>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <label className="space-y-1.5 text-xs font-semibold text-[#667086]">
+          <span>Outcome</span>
+          <select
+            value={filters.outcome_status ?? ''}
+            onChange={(event) => onChange({ outcome_status: event.target.value as VoiceCallFilterState['outcome_status'] })}
+            className={selectClassName}
+          >
+            <option value="">All outcomes</option>
+            <option value="lead_created">Lead created</option>
+            <option value="crm_failed">CRM failed</option>
+            <option value="gather_incomplete">Gather incomplete</option>
+            <option value="mapping_failed">Mapping failed</option>
+            <option value="ended_without_lead">Ended without lead</option>
+            <option value="review_needed">Review needed</option>
+          </select>
+        </label>
 
-          <label className="space-y-2 text-sm text-slate-800">
-            <span className="font-semibold">Review</span>
-            <select
-              value={filters.review_status ?? ''}
-              onChange={(event) => onChange({ review_status: event.target.value as VoiceCallFilterState['review_status'] })}
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All review states</option>
-              <option value="open">Open review</option>
-              <option value="resolved">Resolved</option>
-              <option value="dismissed">Dismissed</option>
-              <option value="not_needed">Not needed</option>
-            </select>
-          </label>
+        <label className="space-y-1.5 text-xs font-semibold text-[#667086]">
+          <span>Review</span>
+          <select
+            value={filters.review_status ?? ''}
+            onChange={(event) => onChange({ review_status: event.target.value as VoiceCallFilterState['review_status'] })}
+            className={selectClassName}
+          >
+            <option value="">All review states</option>
+            <option value="open">Open review</option>
+            <option value="resolved">Resolved</option>
+            <option value="dismissed">Dismissed</option>
+            <option value="not_needed">Not needed</option>
+          </select>
+        </label>
 
-          <label className="space-y-2 text-sm text-slate-800">
-            <span className="font-semibold">Assistant</span>
-            <select
-              value={filters.assistant_id}
-              onChange={(event) => onChange({ assistant_id: event.target.value })}
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All assistants</option>
-              {assistantOptions.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
-              ))}
-            </select>
-          </label>
+        <label className="space-y-1.5 text-xs font-semibold text-[#667086]">
+          <span>Assistant</span>
+          <select
+            value={filters.assistant_id}
+            onChange={(event) => onChange({ assistant_id: event.target.value })}
+            className={selectClassName}
+          >
+            <option value="">All assistants</option>
+            {assistantOptions.map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label className="space-y-2 text-sm text-slate-800">
-            <span className="font-semibold">Number</span>
-            <select
-              value={filters.phone_number_id}
-              onChange={(event) => onChange({ phone_number_id: event.target.value })}
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All numbers</option>
-              {numberOptions.map(([id, label]) => (
-                <option key={id} value={id}>{label}</option>
-              ))}
-            </select>
-          </label>
+        <label className="space-y-1.5 text-xs font-semibold text-[#667086]">
+          <span>Number</span>
+          <select
+            value={filters.phone_number_id}
+            onChange={(event) => onChange({ phone_number_id: event.target.value })}
+            className={selectClassName}
+          >
+            <option value="">All numbers</option>
+            {numberOptions.map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <label className="space-y-2 text-sm text-slate-800">
-            <span className="font-semibold">CRM record</span>
-            <select
-              value={filters.has_record}
-              onChange={(event) => onChange({ has_record: event.target.value as VoiceCallFilterState['has_record'] })}
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-[15px] text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="all">All calls</option>
-              <option value="yes">With record</option>
-              <option value="no">Without record</option>
-            </select>
-          </label>
-        </div>
+        <label className="space-y-1.5 text-xs font-semibold text-[#667086]">
+          <span>CRM record</span>
+          <select
+            value={filters.has_record}
+            onChange={(event) => onChange({ has_record: event.target.value as VoiceCallFilterState['has_record'] })}
+            className={selectClassName}
+          >
+            <option value="all">All calls</option>
+            <option value="yes">With record</option>
+            <option value="no">Without record</option>
+          </select>
+        </label>
       </div>
     </div>
   );

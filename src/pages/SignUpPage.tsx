@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { SignUpForm } from '../components/auth/SignUpForm';
-import { SignupValuePanel } from '../components/auth/SignupValuePanel';
+import { SigninValuePanel } from '../components/auth/SigninValuePanel';
 
 const smoothEase = [0.21, 0.47, 0.32, 0.98] as const;
 
@@ -34,7 +34,8 @@ export function SignUpPage() {
         eyebrow="Create workspace"
         title="Launch your CRM workspace"
         description="Set up your account and workspace in one guided flow."
-        leftPanel={<SignupValuePanel />}
+        leftPanel={<SigninValuePanel />}
+        layoutVariant="signin"
         footer={
           <motion.p
             initial={{ opacity: 0 }}
