@@ -7,13 +7,19 @@ interface WorkspaceLayoutProps {
   workspace: WorkspaceSummary;
   onSignOut: () => Promise<void>;
   children: ReactNode;
+  mainBackgroundClassName?: string;
 }
 
-export function WorkspaceLayout({ workspace, onSignOut, children }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({
+  workspace,
+  onSignOut,
+  children,
+  mainBackgroundClassName = 'bg-[#f3f3f3]',
+}: WorkspaceLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-100 lg:pl-[280px]">
+    <div className="min-h-screen bg-slate-100 lg:pl-[256px]">
       <DashboardSidebar workspace={workspace} />
-      <main className="flex min-h-screen flex-1 flex-col bg-[#EEF0F7]">
+      <main className={`flex min-h-screen flex-1 flex-col ${mainBackgroundClassName}`}>
         <DashboardTopbar workspace={workspace} onSignOut={onSignOut} />
         <div className="flex-1">
           <div className="mx-auto w-full max-w-[1680px] px-4 py-5 lg:px-6 2xl:px-8">

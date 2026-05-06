@@ -644,7 +644,7 @@ export function SignUpForm() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.55 }}
-        className="text-center text-xs leading-4 text-slate-600"
+        className="text-center text-sm leading-7 text-slate-600"
       >
         Already have an account?{' '}
         <Link

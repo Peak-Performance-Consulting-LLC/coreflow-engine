@@ -591,8 +591,8 @@ export function RecordsPage() {
   }
 
   return (
-    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-5 rounded-[28px] border border-[#dce0ea] bg-[#f3f5fb] p-4 shadow-[0_10px_28px_-20px_rgba(33,44,78,0.28)] sm:p-6">
+    <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut} mainBackgroundClassName="bg-[#f3f3f3]">
+      <div className="space-y-5 bg-[#f3f3f3] p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#546190]">{formatCrmLabel(workspace.crmType)} workspace</div>

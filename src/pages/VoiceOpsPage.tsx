@@ -252,7 +252,7 @@ export function VoiceOpsPage() {
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={handleSignOut}>
-      <div className="space-y-5 rounded-[28px] border border-[#d9deea] bg-[#f3f5fb] p-4 shadow-[0_10px_28px_-20px_rgba(33,44,78,0.28)] sm:p-6">
+      <div className="space-y-5 bg-[#f3f3f3] p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-sm font-medium text-[#7a8196]">
