@@ -34,7 +34,7 @@ export function VoiceCallFilters({ filters, calls, loading, onChange, onReset }:
   );
 
   const selectClassName =
-    'h-10 w-full rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] outline-none focus:border-[#bdc4d8]';
+    'h-10 w-full rounded-lg border border-[#d9deea] bg-stone-50 px-3.5 text-sm font-medium text-[#4e566b] outline-none focus:border-[#bdc4d8]';
 
   return (
     <div className="rounded-2xl border border-[#d9deea] bg-white p-4">
@@ -42,8 +42,8 @@ export function VoiceCallFilters({ filters, calls, loading, onChange, onReset }:
         <div className="flex items-center gap-2">
           <Filter className="mt-0.5 h-3.5 w-3.5 text-[#8c93a6]" />
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#667086]">Filters</div>
-            <div className="mt-1 text-xs text-[#8a92a7]">Slice the inbound queue by outcome, review state, agent, and number.</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#00040e]">Filters</div>
+            <div className="mt-1 text-xs text-[#191a1e]">Slice the inbound queue by outcome, review state, agent, and number.</div>
           </div>
         </div>
         <button

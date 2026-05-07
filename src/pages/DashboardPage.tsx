@@ -2,7 +2,12 @@ import type { Session } from '@supabase/supabase-js';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { DashboardShell, type DashboardShellHealthItem, type DashboardShellOverview } from '../components/dashboard/DashboardShell';
+import {
+  DashboardShell,
+  type DashboardShellHealthItem,
+  type DashboardShellOverview,
+  type DashboardShellRecommendation,
+} from '../components/dashboard/DashboardShell';
 import type { WorkspaceSetupActionItem } from '../components/dashboard/WorkspaceSetupChecklist';
 import type { AppPageGuide } from '../context/AppGuideContext';
 import { useAuth } from '../hooks/useAuth';
@@ -431,54 +436,142 @@ function buildOverview(params: {
     },
   ];
 
-  const recommendationCards = [
-    {
-      id: 'recommendation-records',
-      title:
-        recentlyCreatedCount > 0
-          ? `${formatActionTitle(recentlyCreatedCount, 'new record needs', 'new records need', 'review')}`
-          : 'Review new leads',
-      description:
-        recentlyCreatedCount > 0
-          ? 'Check recently created records and follow up quickly before they cool off.'
-          : 'Check recently created records and follow up quickly when new work lands.',
-      ctaLabel: 'Open records',
-      to: '/records',
-      tone: recentlyCreatedCount > 0 ? ('warning' as const) : ('neutral' as const),
-      icon: 'records' as const,
-    },
-    {
-      id: 'recommendation-workflow',
-      title: primaryPipeline ? 'Workflow setup is in place' : 'Complete workflow setup',
-      description: primaryPipeline
-        ? 'Review your pipeline stages, fields, and automation readiness from one shared structure.'
-        : 'Review your pipeline stages, fields, and automation readiness before the queue grows.',
-      ctaLabel: primaryPipeline ? 'Review setup' : 'Open setup',
+  const pendingSetupActionIds = new Set(params.setupActions.filter((action) => !action.configured).map((action) => action.id));
+  const recommendationCards: DashboardShellRecommendation[] = [];
+  const totalQueueAttentionCount = overdueRecordCount + unassignedRecordCount + staleWorkflowCount;
+
+  if (pendingSetupActionIds.has('setup-number') || (voiceNumbers && !hasConnectedNumber)) {
+    recommendationCards.push({
+      id: 'priority-purchase-number',
+      title: 'Purchase a number',
+      description: 'Provision a workspace voice number so inbound calls can be received and routed.',
+      ctaLabel: 'Purchase number',
+      to: '/voice/numbers/new',
+      priority: 10,
+      tone: 'warning',
+      icon: 'voice-number',
+    });
+  }
+
+  if (pendingSetupActionIds.has('setup-assistant') || (voiceAgents && assistantCount === 0)) {
+    recommendationCards.push({
+      id: 'priority-create-assistant',
+      title: 'Create an assistant',
+      description: 'Set up an AI assistant to answer calls, capture lead details, and route next steps.',
+      ctaLabel: 'Create assistant',
+      to: '/voice/assistants/new',
+      priority: 20,
+      tone: 'warning',
+      icon: 'integrations',
+    });
+  }
+
+  if (pendingSetupActionIds.has('setup-email') || (accountSettings && !hasConnectedEmail)) {
+    recommendationCards.push({
+      id: 'priority-email-configuration',
+      title: 'Complete email configuration',
+      description: 'Connect a sender so invitations, confirmations, and workspace automations can be delivered.',
+      ctaLabel: 'Configure email',
+      to: '/email',
+      priority: 30,
+      tone: 'warning',
+      icon: 'email',
+    });
+  }
+
+  if (!primaryPipeline) {
+    recommendationCards.push({
+      id: 'priority-workflow-setup',
+      title: 'Complete workflow setup',
+      description: 'Define stages and shared record flow before the workspace queue grows.',
+      ctaLabel: 'Open setup',
       to: workflowSetupRoute,
-      tone: primaryPipeline ? ('success' as const) : ('warning' as const),
-      icon: 'workflow' as const,
-    },
-    {
-      id: 'recommendation-queue',
-      title:
-        overdueRecordCount + unassignedRecordCount + staleWorkflowCount > 0
-          ? `${overdueRecordCount + unassignedRecordCount + staleWorkflowCount} records need attention`
-          : 'Open active queue',
-      description:
-        overdueRecordCount + unassignedRecordCount + staleWorkflowCount > 0
-          ? 'See records that need updates, owners, or the next clear step in the workspace queue.'
-          : 'The queue is moving cleanly right now. Open it to review ownership and next steps.',
+      priority: 40,
+      tone: 'warning',
+      icon: 'workflow',
+    });
+  }
+
+  if (totalQueueAttentionCount > 0) {
+    recommendationCards.push({
+      id: 'priority-record-attention',
+      title: `${totalQueueAttentionCount} records need attention`,
+      description: 'Review overdue, unassigned, and stale records so the queue keeps moving.',
       ctaLabel: 'Review queue',
       to: '/records',
-      tone:
-        overdueRecordCount > 0
-          ? ('warning' as const)
-          : overdueRecordCount + unassignedRecordCount + staleWorkflowCount > 0
-            ? ('neutral' as const)
-            : ('success' as const),
-      icon: 'queue' as const,
-    },
-  ];
+      priority: 50,
+      tone: overdueRecordCount > 0 ? 'warning' : 'neutral',
+      icon: 'queue',
+    });
+  }
+
+  if (recentlyCreatedCount > 0) {
+    recommendationCards.push({
+      id: 'priority-review-new-leads',
+      title: formatActionTitle(recentlyCreatedCount, 'new record needs', 'new records need', 'review'),
+      description: 'Follow up on recently created records while intent is still high.',
+      ctaLabel: 'Open records',
+      to: '/records',
+      priority: 60,
+      tone: 'neutral',
+      icon: 'records',
+    });
+  }
+
+  if (recommendationCards.length > 0 && recommendationCards.length < 3) {
+    const recommendationIds = new Set(recommendationCards.map((card) => card.id));
+    const supplementalRecommendations: DashboardShellRecommendation[] = [
+      {
+        id: 'supplemental-review-queue',
+        title: totalQueueAttentionCount > 0 ? `${totalQueueAttentionCount} records need attention` : 'Review workspace queue',
+        description:
+          totalQueueAttentionCount > 0
+            ? 'Prioritize overdue, unassigned, and stale records to keep momentum.'
+            : 'Open the queue to confirm ownership and next steps are clean.',
+        ctaLabel: 'Open queue',
+        to: '/records',
+        priority: 70,
+        tone: totalQueueAttentionCount > 0 ? 'warning' : 'neutral',
+        icon: 'queue',
+      },
+      {
+        id: 'supplemental-workflow-health',
+        title: primaryPipeline ? 'Workflow setup is in place' : 'Complete workflow setup',
+        description: primaryPipeline
+          ? 'Review stage health and process consistency across the workspace.'
+          : 'Define your stage model before the queue grows.',
+        ctaLabel: primaryPipeline ? 'Review setup' : 'Open setup',
+        to: workflowSetupRoute,
+        priority: 80,
+        tone: primaryPipeline ? 'success' : 'warning',
+        icon: 'workflow',
+      },
+      {
+        id: 'supplemental-review-records',
+        title: recentlyCreatedCount > 0 ? 'Review new leads' : 'Open active records',
+        description:
+          recentlyCreatedCount > 0
+            ? 'Follow up with newly created records while response intent is high.'
+            : 'Open records to review ownership and progress.',
+        ctaLabel: 'Open records',
+        to: '/records',
+        priority: 90,
+        tone: recentlyCreatedCount > 0 ? 'warning' : 'neutral',
+        icon: 'records',
+      },
+    ];
+
+    for (const supplemental of supplementalRecommendations) {
+      if (recommendationCards.length >= 3) {
+        break;
+      }
+
+      if (!recommendationIds.has(supplemental.id)) {
+        recommendationCards.push(supplemental);
+        recommendationIds.add(supplemental.id);
+      }
+    }
+  }
 
   const summaryCards = [
     {

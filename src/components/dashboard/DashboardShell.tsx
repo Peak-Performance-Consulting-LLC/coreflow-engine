@@ -13,7 +13,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { WorkspaceSummary } from '../../lib/types';
 import { cn } from '../../lib/utils';
@@ -35,8 +35,9 @@ export interface DashboardShellRecommendation {
   description: string;
   ctaLabel: string;
   to: string;
+  priority: number;
   tone: 'neutral' | 'warning' | 'success';
-  icon: 'records' | 'workflow' | 'queue';
+  icon: 'records' | 'workflow' | 'queue' | 'integrations' | 'email' | 'voice-number';
 }
 
 export interface DashboardShellSummaryCard {
@@ -198,6 +199,27 @@ function getAccentClasses(icon: DashboardShellRecommendation['icon'] | Dashboard
         circle: 'bg-[#ffd46d]',
         dot: 'bg-[#f3b300]',
         ring: 'bg-[#fff2c9]',
+      };
+    case 'integrations':
+      return {
+        iconWrap: 'border-violet-100 bg-violet-500 text-white',
+        circle: 'bg-[#c4b5fd]',
+        dot: 'bg-[#7c3aed]',
+        ring: 'bg-[#ede9fe]',
+      };
+    case 'email':
+      return {
+        iconWrap: 'border-cyan-100 bg-cyan-500 text-white',
+        circle: 'bg-[#a5f3fc]',
+        dot: 'bg-[#0891b2]',
+        ring: 'bg-[#cffafe]',
+      };
+    case 'voice-number':
+      return {
+        iconWrap: 'border-emerald-100 bg-emerald-500 text-white',
+        circle: 'bg-[#a7f3d0]',
+        dot: 'bg-[#059669]',
+        ring: 'bg-[#d1fae5]',
       };
     case 'queue':
       return {
@@ -400,16 +422,60 @@ export function DashboardShell({
   showSetupPopup = false,
   onCloseSetupPopup,
 }: DashboardShellProps) {
+  const [isHeroCollapsed, setIsHeroCollapsed] = useState(false);
+  const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<string[]>([]);
   const pendingSetupActions = setupActions.filter((action) => !action.configured);
+  const prioritizedRecommendations = useMemo(
+    () => [...overview.recommendations].sort((left, right) => left.priority - right.priority),
+    [overview.recommendations],
+  );
+  const visibleRecommendations = useMemo(
+    () => prioritizedRecommendations.filter((recommendation) => !dismissedRecommendationIds.includes(recommendation.id)).slice(0, 3),
+    [dismissedRecommendationIds, prioritizedRecommendations],
+  );
+  const hasVisibleRecommendations = visibleRecommendations.length > 0;
+  const remainingRecommendationCount = useMemo(
+    () => prioritizedRecommendations.filter((recommendation) => !dismissedRecommendationIds.includes(recommendation.id)).length,
+    [dismissedRecommendationIds, prioritizedRecommendations],
+  );
+
+  useEffect(() => {
+    setDismissedRecommendationIds((current) => current.filter((id) => prioritizedRecommendations.some((recommendation) => recommendation.id === id)));
+  }, [prioritizedRecommendations]);
+
+  function handleDismissRecommendation(recommendationId: string) {
+    setDismissedRecommendationIds((current) => (current.includes(recommendationId) ? current : [...current, recommendationId]));
+  }
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
       <div className="space-y-5">
         <section
           data-guide-id="dashboard-hero"
-          className="overflow-hidden rounded-[22px] border border-[#d8dde6] bg-[#f3f8fe] shadow-[0_3px_10px_rgba(0,0,0,0.08)]"
+          className="relative overflow-hidden rounded-[22px] border border-[#d5e3f5] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_55%,#f5f8ff_100%)] shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
         >
-          <div className="grid gap-6 px-6 py-7 xl:grid-cols-[1.1fr_1.9fr] xl:items-center">
+          <div className="pointer-events-none absolute -top-20 right-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(59,130,246,0)_72%)]" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.14)_0%,rgba(56,189,248,0)_72%)]" />
+
+          <div
+            className={cn(
+              'relative z-10 grid gap-6 px-6 py-7',
+              !isHeroCollapsed && hasVisibleRecommendations && 'xl:grid-cols-[1.1fr_1.9fr] xl:items-center',
+            )}
+          >
+            <div className={cn('flex justify-end', !isHeroCollapsed && 'xl:col-span-2')}>
+              <button
+                type="button"
+                onClick={() => setIsHeroCollapsed((current) => !current)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#d8dde6] bg-white px-3 py-1.5 text-xs font-semibold text-[#0176d3] transition hover:bg-[#f3f8fe]"
+                aria-expanded={!isHeroCollapsed}
+                aria-label={isHeroCollapsed ? 'Expand header' : 'Collapse header'}
+              >
+                {isHeroCollapsed ? 'Expand' : 'Collapse'}
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isHeroCollapsed ? '-rotate-180' : 'rotate-0')} />
+              </button>
+            </div>
+
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-[#0176d3]">
                 <div className="h-2.5 w-2.5 rounded-full bg-[#0176d3]" />
@@ -419,55 +485,67 @@ export function DashboardShell({
 
               <div>
                 <h1 className="text-[46px] font-light tracking-tight text-[#16325c]">{overview.panelTitle}</h1>
-                <p className="mt-2 max-w-md text-[18px] leading-7 text-slate-700">{overview.panelSubtitle}</p>
+                {!isHeroCollapsed ? <p className="mt-2 max-w-md text-[18px] leading-7 text-slate-700">{overview.panelSubtitle}</p> : null}
               </div>
 
-              {renderActionLink(overview.panelLink, 'w-fit')}
+              {!isHeroCollapsed ? renderActionLink(overview.panelLink, 'w-fit') : null}
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                {overview.quickActions.map((action) => renderActionLink(action))}
-              </div>
+              {!isHeroCollapsed ? (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {overview.quickActions.map((action) => renderActionLink(action))}
+                </div>
+              ) : null}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {overview.recommendations.map((recommendation) => {
-                const accent = getAccentClasses(recommendation.icon);
-                const Icon = getIcon(recommendation.icon);
+            {!isHeroCollapsed && hasVisibleRecommendations ? (
+              <div className="space-y-3">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {visibleRecommendations.map((recommendation) => {
+                    const accent = getAccentClasses(recommendation.icon);
+                    const Icon = getIcon(recommendation.icon);
 
-                return (
-                  <article
-                    key={recommendation.id}
-                    className="min-h-[210px] rounded-[20px] border border-[#e5e7eb] bg-white p-5 shadow-[0_2px_10px_rgba(0,0,0,0.06)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={cn('flex h-9 w-9 items-center justify-center rounded-full border', accent.iconWrap)}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <button
-                        type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-[#0176d3] transition hover:bg-[#f3f8fe]"
-                        aria-label={`Dismiss ${recommendation.title}`}
+                    return (
+                      <article
+                        key={recommendation.id}
+                        className="min-h-[210px] rounded-[20px] border border-[#dbe4f2] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-[2px]"
                       >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className={cn('flex h-9 w-9 items-center justify-center rounded-full border', accent.iconWrap)}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDismissRecommendation(recommendation.id)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-[#0176d3] transition hover:bg-[#f3f8fe]"
+                            aria-label={`Dismiss ${recommendation.title}`}
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        </div>
 
-                    <div className="mt-5">
-                      <h2 className="text-[17px] font-medium leading-6 text-[#16325c]">{recommendation.title}</h2>
-                      <p className="mt-3 text-sm leading-6 text-slate-700">{recommendation.description}</p>
-                    </div>
+                        <div className="mt-5">
+                          <h2 className="text-[17px] font-medium leading-6 text-[#16325c]">{recommendation.title}</h2>
+                          <p className="mt-3 text-sm leading-6 text-slate-700">{recommendation.description}</p>
+                        </div>
 
-                    <Link
-                      to={recommendation.to}
-                      className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#0176d3] transition hover:text-[#014486]"
-                    >
-                      {recommendation.ctaLabel}
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                  </article>
-                );
-              })}
-            </div>
+                        <Link
+                          to={recommendation.to}
+                          className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#0176d3] transition hover:text-[#014486]"
+                        >
+                          {recommendation.ctaLabel}
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </article>
+                    );
+                  })}
+                </div>
+                {remainingRecommendationCount > 0 ? (
+                  <p className="text-xs font-medium text-slate-500">
+                    {`${remainingRecommendationCount} priority ${remainingRecommendationCount === 1 ? 'card' : 'cards'} remaining`}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
 

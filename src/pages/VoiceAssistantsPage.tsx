@@ -119,6 +119,7 @@ export function VoiceAssistantsPage() {
           eyebrow="Voice workspace"
           title="Assistants"
           description="Create and manage assistants, mappings, and number bindings in a dedicated workspace area."
+          tone="neutral"
           actions={(
             <>
               <Link

@@ -38,6 +38,13 @@ const defaultFilters: Omit<RecordListFilters, 'workspace_id'> = {
 };
 const defaultPage = 1;
 const defaultPageSize = 10;
+const metricCardTheme = {
+  border: 'border-[#d7ddea]',
+  background: 'bg-[linear-gradient(145deg,#ffffff_0%,#f8faff_62%,#f4f7fd_100%)]',
+  glow: 'bg-[radial-gradient(circle,rgba(61,82,120,0.1)_0%,rgba(61,82,120,0)_72%)]',
+  topAccent: 'bg-[linear-gradient(90deg,rgba(140,154,178,0.45)_0%,rgba(167,179,199,0.34)_55%,rgba(196,204,218,0.26)_100%)]',
+  value: 'text-[#1b2a44]',
+};
 
 function createEmptyRecordPage(page = defaultPage, pageSize = defaultPageSize): RecordListPageResult {
   return {
@@ -628,16 +635,26 @@ export function RecordsPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {metricCards.map((metric) => {
               const trendValue = recordPage.total > 0 ? (metric.value / recordPage.total) * 100 : 0;
+              const theme = metricCardTheme;
 
               return (
-                <Card key={metric.label} className="border border-[#d9deea] bg-white p-5 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+                <Card
+                  key={metric.label}
+                  className={`group relative overflow-hidden p-5 shadow-[0_12px_24px_-18px_rgba(20,35,64,0.45)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_32px_-18px_rgba(20,35,64,0.58)] ${theme.border} ${theme.background}`}
+                >
+                  <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${theme.topAccent} opacity-85 transition group-hover:opacity-100`} />
+                  <div className={`pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full ${theme.glow}`} />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.34)_0%,rgba(255,255,255,0)_45%)]" />
+
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5f687f]">{metric.label}</div>
-                    <span className="rounded-full bg-[#edf0f6] px-2.5 py-1 text-[11px] font-semibold text-[#7a8297]">
+                    <div className="relative text-xs font-semibold uppercase tracking-[0.14em] text-[#5a6688]">{metric.label}</div>
+                    <span className="relative rounded-full border border-[#d4dcec] bg-white/92 px-2.5 py-1 text-[11px] font-semibold text-[#677291] shadow-[0_1px_0_rgba(255,255,255,0.75),inset_0_1px_0_rgba(255,255,255,0.92)]">
                       +{trendValue.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="mt-5 font-display text-4xl font-semibold tracking-tight text-[#1f2b3f]">{metric.value.toLocaleString()}</div>
+                  <div className={`relative mt-5 font-display text-4xl font-semibold tracking-tight ${theme.value}`}>
+                    {metric.value.toLocaleString()}
+                  </div>
                 </Card>
               );
             })}
@@ -650,9 +667,9 @@ export function RecordsPage() {
         )}
 
         {config ? (
-          <Card className="border border-[#d9deea] bg-white p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
+          <Card className="border border-[#d9deea] bg-stone-50 p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-5 border-b border-[#e4e8f1] px-5 py-3">
+              <div className="flex flex-wrap items-center gap-5 border-b border-[#e4e6e9] px-5 py-3">
                 {[
                   { key: 'all', label: 'All Records', status: null, includeArchived: false },
                   { key: 'open', label: 'Active', status: 'open', includeArchived: false },
@@ -695,7 +712,7 @@ export function RecordsPage() {
                       stage_id: event.target.value || null,
                     }))
                   }
-                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#ffffff] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All stages</option>
                   {config.pipelines.flatMap((pipeline) =>
@@ -714,7 +731,7 @@ export function RecordsPage() {
                       source_id: event.target.value || null,
                     }))
                   }
-                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#ffffff] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All sources</option>
                   {config.sources.map((source) => (
@@ -728,7 +745,7 @@ export function RecordsPage() {
                   onChange={(event) =>
                     updateFilters((current) => ({ ...current, assignee_user_id: event.target.value || null }))
                   }
-                  className="h-10 rounded-lg border border-[#d9deea] bg-[#f8f9fc] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
+                  className="h-10 rounded-lg border border-[#d9deea] bg-[#fffefe] px-3.5 text-sm font-medium text-[#4e566b] focus:border-[#bdc4d8] focus:outline-none"
                 >
                   <option value="">All owners</option>
                   {config.assignees.map((assignee) => (
@@ -743,7 +760,7 @@ export function RecordsPage() {
                     setFilters(defaultFilters);
                     setPage(defaultPage);
                   }}
-                  className="inline-flex h-10 items-center justify-center rounded-lg border border-transparent bg-transparent px-4 text-sm font-semibold text-[#7a8094] transition hover:bg-[#f2f4f8] hover:text-[#565c70]"
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-[#4c39df] px-4 text-sm font-semibold text-white shadow-[0_10px_20px_-12px_rgba(76,57,223,0.68)] transition hover:bg-[#412fd0]"
                 >
                   Reset filters
                 </button>

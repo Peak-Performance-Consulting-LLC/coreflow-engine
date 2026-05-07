@@ -180,7 +180,7 @@ export function RecordList({
       </div>
 
       <div className="overflow-x-auto">
-        <div className={recordListGridClassName + ' border-b border-[#e4e8f1] bg-[#f7f8fc] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6a7288]'}>
+        <div className={recordListGridClassName + ' border-b border-[#e4e8f1] bg-stone-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#000209]'}>
           <div className="flex items-center justify-center">
             <input
               ref={selectAllRef}
@@ -217,7 +217,7 @@ export function RecordList({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[#e4e8f1] px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 border-t border-[#e2e8f5] px-5 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="text-sm font-medium text-[#667086]">
           Showing {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1}-
           {Math.min(pagination.total, pagination.page * pagination.pageSize)} of {pagination.total} records

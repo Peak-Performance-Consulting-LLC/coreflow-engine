@@ -1,5 +1,5 @@
 // SignUpForm.tsx
-import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, Rocket, CheckCircle2, X, Shuffle } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Sparkles, CheckCircle2, X, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -73,9 +73,6 @@ export function SignUpForm() {
   const [errors, setErrors] = useState<FormErrors>({});
   const selectedCrm = crmOptions.find((option) => option.value === crmType);
   const SelectedCrmIcon = selectedCrm?.icon ?? Sparkles;
-  const previewUrl = `${typeof window === 'undefined' ? 'coreflow.app/' : `${window.location.host}/`}${
-    workspaceSlug || 'your-workspace'
-  }`;
 
   function validateAccountStep() {
     const nextErrors: FormErrors = {};
@@ -346,26 +343,12 @@ export function SignUpForm() {
               initial="enter"
               animate="center"
               exit="exit"
-              className="relative overflow-hidden rounded-[24px] border border-slate-200 bg-white/88 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+              className="space-y-4"
             >
-              <motion.div
-                className="pointer-events-none absolute -right-14 -top-16 h-36 w-36 rounded-full bg-gradient-to-br from-fuchsia-300/25 to-cyan-300/25 blur-3xl"
-                animate={{ scale: [1, 1.18, 1], opacity: [0.4, 0.8, 0.4] }}
-                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              <div className="relative grid gap-3">
-                <div className="flex items-center gap-3">
-                  <motion.div
-                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white shadow-glow"
-                    animate={{ rotate: [0, -8, 8, 0], y: [0, -3, 0] }}
-                    transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <Rocket className="h-5 w-5" />
-                  </motion.div>
-                  <div className="min-w-0">
-                    <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-700">Workspace setup</h2>
-                    <p className="mt-1 text-xs text-slate-600">Compact launch details.</p>
-                  </div>
+              <div className="grid gap-3">
+                <div>
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-700">Workspace setup</h2>
+                  <p className="mt-1 text-sm text-slate-600">Compact launch details.</p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -391,52 +374,17 @@ export function SignUpForm() {
                   />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-stretch">
-                  <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3">
-                    <motion.span
-                      className="pointer-events-none absolute right-3 top-3 h-2 w-2 rounded-full bg-indigo-500"
-                      animate={{ scale: [0.8, 1.6, 0.8], opacity: [0.35, 0.9, 0.35] }}
-                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-indigo-700">Preview URL</div>
-                    <div className="mt-1 break-all font-display text-sm font-semibold text-slate-900">{previewUrl}</div>
-                  </div>
-
-                  <motion.button
+                <div className="grid gap-3">
+                  <button
                     type="button"
                     onClick={() => setModePickerOpen(true)}
-                    className="group relative flex min-w-[250px] items-center gap-3 overflow-hidden rounded-2xl border-2 border-accent-blue/35 bg-white p-3 text-left shadow-glow transition hover:-translate-y-0.5 hover:border-accent-blue/70 hover:shadow-2xl"
-                    animate={{
-                      y: [0, -3, 0],
-                      boxShadow: [
-                        '0 0 0 rgba(79,70,229,0.12)',
-                        '0 16px 36px rgba(79,70,229,0.26)',
-                        '0 0 0 rgba(79,70,229,0.12)',
-                      ],
-                    }}
-                    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                    whileHover={{ scale: 1.025 }}
-                    whileTap={{ scale: 0.98 }}
+                    className="group flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-slate-300 bg-white p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 active:scale-[0.995]"
+                    aria-label={selectedCrm ? `Change CRM mode, currently ${selectedCrm.label}` : 'Select CRM mode'}
                   >
-                    <motion.div
-                      className="pointer-events-none absolute -inset-1 rounded-[18px] border border-accent-blue/30"
-                      animate={{ scale: [1, 1.04, 1], opacity: [0.35, 0.9, 0.35] }}
-                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/16 via-cyan-400/10 to-fuchsia-400/12 opacity-95" />
-                    <motion.span
-                      className="pointer-events-none absolute right-11 top-3 h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.75)]"
-                      animate={{ scale: [0.8, 1.7, 0.8], opacity: [0.35, 1, 0.35] }}
-                      transition={{ duration: 1.25, repeat: Infinity, ease: 'easeInOut' }}
-                    />
-                    <motion.div
-                      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-accent-blue/25 bg-white text-accent-blue shadow-sm"
-                      animate={{ rotate: [0, -5, 5, 0], scale: [1, 1.06, 1] }}
-                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-                    >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-accent-blue">
                       <SelectedCrmIcon className="h-5 w-5" />
-                    </motion.div>
-                    <div className="relative min-w-0 flex-1">
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">CRM mode</div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {selectedCrm ? (
@@ -450,43 +398,36 @@ export function SignUpForm() {
                           <span className="font-display text-sm font-semibold text-slate-900">Select a CRM mode</span>
                         )}
                       </div>
+                      <p className="mt-0.5 text-xs font-medium text-indigo-600">
+                        {selectedCrm ? 'Click to change mode' : 'Click to choose mode'}
+                      </p>
                     </div>
-                    <motion.div
-                      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-blue text-white shadow-sm"
-                      animate={{ rotate: [0, 12, -12, 0] }}
-                      transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 0.4 }}
-                    >
-                      <Shuffle className="h-4 w-4" />
-                    </motion.div>
-                  </motion.button>
+                    <div className="flex items-center gap-2">
+                      <span className="hidden rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 sm:inline-flex">
+                        {selectedCrm ? 'Change' : 'Select'}
+                      </span>
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-blue text-white shadow-sm transition group-hover:translate-x-0.5">
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <span className="sr-only">Opens CRM mode selector dialog</span>
+                  </button>
                 </div>
 
-                <motion.label
-                  whileHover={{ y: -2, scale: 1.005 }}
-                  className="group relative flex cursor-pointer items-start gap-3 overflow-hidden rounded-2xl border border-indigo-100 bg-white/80 p-3 text-xs leading-5 text-slate-700 shadow-sm"
-                >
-                  <motion.span
-                    className="pointer-events-none absolute right-4 top-4 h-2 w-2 rounded-full bg-indigo-400 shadow-[0_0_16px_rgba(99,102,241,0.55)]"
-                    animate={{ scale: [0.8, 1.5, 0.8], opacity: [0.35, 0.9, 0.35] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-                  />
+                <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-300 bg-white p-3 text-xs leading-5 text-slate-700">
                   <input
                     type="checkbox"
                     checked={termsAccepted}
                     onChange={(event) => setTermsAccepted(event.target.checked)}
                     className="peer sr-only"
                   />
-                  <motion.span
-                    className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-white shadow-sm transition peer-checked:border-accent-blue peer-checked:bg-accent-blue"
-                    animate={termsAccepted ? { rotate: [0, -10, 10, 0], scale: [1, 1.12, 1] } : undefined}
-                    transition={{ duration: 0.45 }}
-                  >
+                  <span className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-white transition peer-checked:border-accent-blue peer-checked:bg-accent-blue">
                     {termsAccepted ? <CheckCircle2 className="h-4 w-4" /> : null}
-                  </motion.span>
-                  <span className="relative">
+                  </span>
+                  <span>
                     I agree to the terms, privacy expectations, and workspace ownership rules for this launch build.
                   </span>
-                </motion.label>
+                </label>
                 {errors.terms ? <p className="text-xs text-rose-500 animate-shake">{errors.terms}</p> : null}
               </div>
             </motion.section>
@@ -599,7 +540,7 @@ export function SignUpForm() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
-        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end"
       >
         {step === 2 && !inviteMode ? (
           <motion.button
@@ -612,9 +553,7 @@ export function SignUpForm() {
             <ArrowLeft className="h-4 w-4" />
             Back
           </motion.button>
-        ) : (
-          <span />
-        )}
+        ) : null}
         <Button
           type="submit"
           size="md"

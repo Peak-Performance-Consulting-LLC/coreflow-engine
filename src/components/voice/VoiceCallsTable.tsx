@@ -61,13 +61,13 @@ export function VoiceCallsTable({
   return (
     <Card className="overflow-hidden border border-[#d9deea] bg-white p-0 shadow-[0_8px_20px_-16px_rgba(34,45,74,0.2)]">
       <div className="border-b border-[#e4e8f1] px-5 py-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5f687f]">Voice queue</div>
-        <div className="mt-1 text-xs text-[#8a92a7]">Every inbound call is visible here, whether it created a lead or needs review.</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#000511]">Voice queue</div>
+        <div className="mt-1 text-xs text-[#32353d]">Every inbound call is visible here, whether it created a lead or needs review.</div>
       </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-[#f7f8fc] text-[#6a7288]">
+          <thead className="bg-stone-100 text-[#00030a]">
             <tr>
               <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Caller</th>
               <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.1em]">Number</th>
