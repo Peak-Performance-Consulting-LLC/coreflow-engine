@@ -25,63 +25,76 @@ const steps = [
 
 export function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="section-shell pt-20">
-      <LandingReveal className="mx-auto max-w-3xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">How It Works</p>
-        <h2 className="mt-2 font-display text-3xl font-semibold text-slate-950 sm:text-4xl">
-          Launch in days with a workflow-first setup
-        </h2>
-      </LandingReveal>
+    <section id="how-it-works" className="bg-white pt-20">
+      <div className="section-shell">
+        <div className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 shadow-[0_28px_80px_rgba(15,23,42,0.32)] sm:p-8 lg:p-10">
+          <img
+            src="/images/coreflow-network-map.svg"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover opacity-30"
+            aria-hidden="true"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.72)_0%,rgba(15,23,42,0.95)_100%)]" />
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-        <div className="relative space-y-4 before:absolute before:bottom-8 before:left-[21px] before:top-8 before:w-px before:bg-gradient-to-b before:from-indigo-300 before:via-indigo-200 before:to-cyan-200">
-          {steps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <LandingReveal key={step.title} delay={0.05 * index}>
-                <article className="group rounded-2xl border border-slate-300/70 bg-gradient-to-b from-white to-slate-100/70 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.12)] transition duration-200 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-[0_20px_36px_rgba(49,46,129,0.15)]">
-                  <div className="flex flex-wrap items-start gap-4">
-                    <div className="relative z-[1] flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-cyan-600 text-white shadow-sm transition duration-200 group-hover:shadow-[0_0_0_6px_rgba(99,102,241,0.12)]">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-700">
+          <LandingReveal className="relative mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-200">How It Works</p>
+            <h2 className="mt-2 font-display text-3xl font-semibold text-white sm:text-4xl">
+              Launch in days with a workflow-first setup
+            </h2>
+          </LandingReveal>
+
+          <div className="relative mt-10 grid gap-5 lg:grid-cols-3">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <LandingReveal key={step.title} delay={0.05 * index}>
+                  <article className="group relative h-full rounded-2xl border border-white/10 bg-white/[0.08] p-5 shadow-[0_18px_48px_rgba(2,6,23,0.3)] backdrop-blur transition duration-200 hover:-translate-y-1 hover:bg-white/[0.12]">
+                    {index < steps.length - 1 ? (
+                      <div className="pointer-events-none absolute left-[calc(100%-0.25rem)] top-10 hidden h-px w-5 bg-gradient-to-r from-indigo-300/80 to-cyan-300/20 lg:block" />
+                    ) : null}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 text-white shadow-[0_10px_24px_rgba(99,102,241,0.3)]">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <p className="rounded-full border border-indigo-200/25 bg-indigo-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-100">
                         Step {step.id}
                       </p>
-                      <h3 className="mt-1 text-lg font-semibold text-slate-900">{step.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
                     </div>
-                  </div>
-                </article>
-              </LandingReveal>
-            );
-          })}
-        </div>
+                    <h3 className="mt-5 text-lg font-semibold text-white">{step.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{step.description}</p>
+                  </article>
+                </LandingReveal>
+              );
+            })}
+          </div>
 
-        <LandingReveal delay={0.12}>
-          <aside className="rounded-2xl border border-slate-600/40 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 shadow-[0_24px_58px_rgba(15,23,42,0.42)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Execution Snapshot</p>
-            <div className="mt-5 space-y-3">
-              {[
-                { metric: 'Onboarding Time', value: '3-5 days' },
-                { metric: 'Workflow Coverage', value: '95%' },
-                { metric: 'Setup Success Rate', value: '99.1%' },
-              ].map((item) => (
-                <div key={item.metric} className="rounded-xl border border-slate-600/40 bg-white/10 p-3 backdrop-blur">
-                  <p className="text-xs uppercase tracking-wide text-slate-300">{item.metric}</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
+          <LandingReveal delay={0.12} className="relative mt-6">
+            <aside className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.08] p-5 backdrop-blur md:grid-cols-[1fr_auto] md:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Execution Snapshot</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { metric: 'Onboarding Time', value: '3-5 days' },
+                    { metric: 'Workflow Coverage', value: '95%' },
+                    { metric: 'Setup Success Rate', value: '99.1%' },
+                  ].map((item) => (
+                    <div key={item.metric} className="rounded-xl border border-white/10 bg-slate-950/45 p-3">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">{item.metric}</p>
+                      <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <Link
-              to="/voice/ops"
-              className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-            >
-              Explore Voice Ops
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </aside>
-        </LandingReveal>
+              </div>
+              <Link
+                to="/voice/ops"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 transition hover:-translate-y-0.5 hover:bg-slate-100"
+              >
+                Explore Voice Ops
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </aside>
+          </LandingReveal>
+        </div>
       </div>
     </section>
   );

@@ -54,9 +54,9 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/35 bg-gradient-to-r from-[#f8fbff]/82 via-white/76 to-[#f6faff]/82 backdrop-blur-xl shadow-[0_10px_28px_-24px_rgba(15,23,42,0.55)]">
-      <div className="mx-auto flex h-16 w-full max-w-[1680px] items-center justify-between px-4 lg:px-6 2xl:px-8">
+      <div className="mx-auto flex h-14 w-full max-w-[1500px] items-center justify-between px-3 lg:px-4 2xl:px-5">
         {/* Search bar */}
-        <div className="hidden w-[360px] items-center gap-2.5 rounded-2xl border border-white/65 bg-white/65 px-3.5 py-2 text-sm text-slate-400 shadow-[0_8px_20px_-16px_rgba(15,23,42,0.6)] transition hover:border-slate-200 hover:bg-white/80 md:flex">
+        <div className="hidden w-[330px] items-center gap-2 rounded-2xl border border-white/65 bg-white/65 px-3 py-1.5 text-sm text-slate-400 shadow-[0_8px_20px_-16px_rgba(15,23,42,0.6)] transition hover:border-slate-200 hover:bg-white/80 md:flex">
           <Search className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="truncate">Search contacts, tasks, or notes</span>
         </div>
@@ -115,7 +115,7 @@ export function DashboardTopbar({ workspace, onSignOut }: DashboardTopbarProps) 
           {/* Sign out */}
           <button
             onClick={() => void onSignOut()}
-            className="flex items-center gap-1.5 rounded-2xl border border-white/75 bg-white/80 px-3.5 py-1.5 text-sm font-semibold text-slate-600 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.58)] transition hover:bg-white hover:text-slate-800"
+            className="flex items-center gap-1.5 rounded-2xl border border-white/75 bg-white/80 px-3 py-1.5 text-sm font-semibold text-slate-600 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.58)] transition hover:bg-white hover:text-slate-800"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sign Out

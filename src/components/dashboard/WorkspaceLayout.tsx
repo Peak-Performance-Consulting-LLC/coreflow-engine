@@ -40,7 +40,7 @@ export function WorkspaceLayout({
   }, [isSidebarCollapsed]);
 
   return (
-    <div className={`min-h-screen bg-slate-100 ${isSidebarCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[256px]'}`}>
+    <div className={`min-h-screen bg-slate-100 ${isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[232px]'}`}>
       <DashboardSidebar
         workspace={workspace}
         collapsed={isSidebarCollapsed}
@@ -49,7 +49,7 @@ export function WorkspaceLayout({
       <main className={`flex min-h-screen flex-1 flex-col ${mainBackgroundClassName}`}>
         <DashboardTopbar workspace={workspace} onSignOut={onSignOut} />
         <div className="flex-1">
-          <div className="mx-auto w-full max-w-[1680px] px-4 py-5 lg:px-6 2xl:px-8">
+          <div className="mx-auto w-full max-w-[1500px] px-3 py-3 lg:px-4 2xl:px-5">
             {children}
           </div>
         </div>

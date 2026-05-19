@@ -10,7 +10,7 @@ import { TestimonialsSection } from '../components/home/TestimonialsSection';
 
 export function HomePage() {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#c7d2fe_0%,_#e2e8f0_34%,_#f8fafc_62%,_#eef2ff_100%)]">
+    <div className="min-h-screen overflow-x-hidden bg-[#f6f8fc]">
       <HomeNavbar />
       <HeroSection />
       <SocialProofSection />

@@ -285,27 +285,27 @@ function DashboardCardFrame({
   const accent = getAccentClasses(icon);
 
   return (
-    <article className="flex h-[460px] flex-col overflow-hidden rounded-[20px] border border-[#d8dde6] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
-      <div className="flex items-center gap-3 px-4 pb-3 pt-4">
+    <article className="flex h-[340px] flex-col overflow-hidden rounded-2xl border border-[#d8dde6] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]">
+      <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
         <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full border', accent.iconWrap)}>
           <Icon className="h-4 w-4" />
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#c9cfd8] bg-white px-3 py-1.5 text-sm text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#c9cfd8] bg-white px-2.5 py-1.5 text-xs text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
             <span className="truncate">{filterLabel || title}</span>
             <Search className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
           </div>
           <Link
             to={action.to}
             state={action.state}
-            className="inline-flex h-9 items-center justify-center rounded-full border border-[#d8dde6] bg-white px-4 text-sm font-semibold text-[#0176d3] transition hover:bg-[#f3f8fe]"
+            className="inline-flex h-8 items-center justify-center rounded-full border border-[#d8dde6] bg-white px-3 text-xs font-semibold text-[#0176d3] transition hover:bg-[#f3f8fe]"
           >
             {action.label}
           </Link>
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d8dde6] bg-white text-[#0176d3] transition hover:bg-[#f3f8fe]"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#d8dde6] bg-white text-[#0176d3] transition hover:bg-[#f3f8fe]"
             aria-label={`${title} options`}
           >
             <ChevronDown className="h-4 w-4" />
@@ -313,9 +313,9 @@ function DashboardCardFrame({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-5">{children}</div>
+      <div className="flex-1 overflow-y-auto px-3 pb-3">{children}</div>
 
-      <div className="mt-auto flex items-center justify-between border-t border-[#e5e7eb] px-4 py-3 text-xs text-slate-500">
+      <div className="mt-auto flex items-center justify-between border-t border-[#e5e7eb] px-3 py-2 text-xs text-slate-500">
         <Link to={footerTo} className="font-medium text-[#0176d3] transition hover:text-[#014486]">
           {footerLabel}
         </Link>
@@ -332,17 +332,17 @@ function SummaryVisual({ card }: { card: DashboardShellSummaryCard }) {
   const accent = getAccentClasses(card.icon);
 
   return (
-    <div className="flex h-full min-h-[290px] flex-col items-center justify-center px-6 text-center">
-      <div className="relative flex h-44 w-44 items-center justify-center">
-        <div className={cn('absolute h-32 w-32 rounded-full', accent.circle)} />
-        <div className={cn('absolute left-6 top-6 h-16 w-16 rounded-full opacity-65', accent.ring)} />
+    <div className="flex h-full min-h-[190px] flex-col items-center justify-center px-4 text-center">
+      <div className="relative flex h-28 w-28 items-center justify-center">
+        <div className={cn('absolute h-24 w-24 rounded-full', accent.circle)} />
+        <div className={cn('absolute left-4 top-4 h-12 w-12 rounded-full opacity-65', accent.ring)} />
         <div className="relative z-10 rounded-2xl border border-[#e5e7eb] bg-white px-5 py-4 shadow-[0_8px_18px_rgba(0,0,0,0.08)]">
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {Array.from({ length: 12 }).map((_, index) => (
               <span
                 key={index}
                 className={cn(
-                  'h-4 w-4 rounded-sm',
+                  'h-3 w-3 rounded-sm',
                   index % 5 === 0 ? accent.dot : 'bg-slate-100',
                 )}
               />
@@ -350,10 +350,10 @@ function SummaryVisual({ card }: { card: DashboardShellSummaryCard }) {
           </div>
         </div>
       </div>
-      <p className="mt-2 text-sm text-slate-600">{card.helperText}</p>
-      <div className="mt-5 space-y-2 text-left w-full max-w-[260px]">
+      <p className="mt-2 text-xs leading-5 text-slate-600">{card.helperText}</p>
+      <div className="mt-3 w-full max-w-[250px] space-y-1.5 text-left">
         {card.highlights.map((highlight) => (
-          <div key={highlight} className="flex items-center gap-2 text-sm text-slate-600">
+          <div key={highlight} className="flex items-center gap-2 text-xs text-slate-600">
             <span className={cn('h-2 w-2 rounded-full', accent.dot)} />
             <span>{highlight}</span>
           </div>
@@ -382,11 +382,11 @@ function EmptyStateIllustration({ variant }: { variant: 'records' | 'queue' }) {
   const Icon = palette.icon;
 
   return (
-    <div className="relative mx-auto h-40 w-[280px]">
-      <div className={cn('absolute left-9 top-1 h-32 w-32 rounded-full opacity-90', palette.orb)} />
-      <div className={cn('absolute left-[58px] top-6 h-32 w-32 rounded-full opacity-60', palette.orbSoft)} />
+    <div className="relative mx-auto h-28 w-[220px]">
+      <div className={cn('absolute left-8 top-1 h-24 w-24 rounded-full opacity-90', palette.orb)} />
+      <div className={cn('absolute left-12 top-5 h-24 w-24 rounded-full opacity-60', palette.orbSoft)} />
 
-      <div className="absolute left-[72px] top-10 w-[190px] rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.12)]">
+      <div className="absolute left-14 top-7 w-[150px] rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-[0_10px_22px_rgba(15,23,42,0.12)]">
         <div className="flex items-center gap-2">
           <span className={cn('inline-flex h-8 w-8 items-center justify-center rounded-full text-white', palette.iconWrap)}>
             <Icon className="h-4 w-4" />
@@ -408,7 +408,7 @@ function ListCardEmpty({ message, variant }: { message: string; variant: 'record
   return (
     <div className="flex min-h-[280px] flex-col items-center justify-center px-5 text-center">
       <EmptyStateIllustration variant={variant} />
-      <p className="mt-3 text-sm text-slate-500">{message}</p>
+      <p className="mt-2 text-xs text-slate-500">{message}</p>
     </div>
   );
 }
@@ -449,18 +449,18 @@ export function DashboardShell({
 
   return (
     <WorkspaceLayout workspace={workspace} onSignOut={onSignOut}>
-      <div className="space-y-5">
+      <div className="space-y-3.5">
         <section
           data-guide-id="dashboard-hero"
-          className="relative overflow-hidden rounded-[22px] border border-[#d5e3f5] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_55%,#f5f8ff_100%)] shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
+          className="relative overflow-hidden rounded-2xl border border-[#d5e3f5] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_55%,#f5f8ff_100%)] shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
         >
           <div className="pointer-events-none absolute -top-20 right-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.18)_0%,rgba(59,130,246,0)_72%)]" />
           <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.14)_0%,rgba(56,189,248,0)_72%)]" />
 
           <div
             className={cn(
-              'relative z-10 grid gap-6 px-6 py-7',
-              !isHeroCollapsed && hasVisibleRecommendations && 'xl:grid-cols-[1.1fr_1.9fr] xl:items-center',
+              'relative z-10 grid gap-4 px-4 py-4',
+              !isHeroCollapsed && hasVisibleRecommendations && 'xl:grid-cols-[0.85fr_2.15fr] xl:items-center',
             )}
           >
             <div className={cn('flex justify-end', !isHeroCollapsed && 'xl:col-span-2')}>
@@ -484,22 +484,22 @@ export function DashboardShell({
               </div>
 
               <div>
-                <h1 className="text-[46px] font-light tracking-tight text-[#16325c]">{overview.panelTitle}</h1>
-                {!isHeroCollapsed ? <p className="mt-2 max-w-md text-[18px] leading-7 text-slate-700">{overview.panelSubtitle}</p> : null}
+                <h1 className="text-3xl font-light tracking-tight text-[#16325c] lg:text-[34px]">{overview.panelTitle}</h1>
+                {!isHeroCollapsed ? <p className="mt-1 max-w-md text-sm leading-6 text-slate-700">{overview.panelSubtitle}</p> : null}
               </div>
 
               {!isHeroCollapsed ? renderActionLink(overview.panelLink, 'w-fit') : null}
 
               {!isHeroCollapsed ? (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {overview.quickActions.map((action) => renderActionLink(action))}
+                  {overview.quickActions.map((action) => renderActionLink(action, 'h-8 px-3 text-xs'))}
                 </div>
               ) : null}
             </div>
 
             {!isHeroCollapsed && hasVisibleRecommendations ? (
-              <div className="space-y-3">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-2">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleRecommendations.map((recommendation) => {
                     const accent = getAccentClasses(recommendation.icon);
                     const Icon = getIcon(recommendation.icon);
@@ -507,7 +507,7 @@ export function DashboardShell({
                     return (
                       <article
                         key={recommendation.id}
-                        className="min-h-[210px] rounded-[20px] border border-[#dbe4f2] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-[2px]"
+                        className="min-h-[150px] rounded-2xl border border-[#dbe4f2] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-4 shadow-[0_10px_22px_rgba(15,23,42,0.07)] backdrop-blur-[2px]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className={cn('flex h-9 w-9 items-center justify-center rounded-full border', accent.iconWrap)}>
@@ -524,13 +524,13 @@ export function DashboardShell({
                         </div>
 
                         <div className="mt-5">
-                          <h2 className="text-[17px] font-medium leading-6 text-[#16325c]">{recommendation.title}</h2>
-                          <p className="mt-3 text-sm leading-6 text-slate-700">{recommendation.description}</p>
+                          <h2 className="text-[15px] font-medium leading-5 text-[#16325c]">{recommendation.title}</h2>
+                          <p className="mt-2 text-xs leading-5 text-slate-700">{recommendation.description}</p>
                         </div>
 
                         <Link
                           to={recommendation.to}
-                          className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#0176d3] transition hover:text-[#014486]"
+                          className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#0176d3] transition hover:text-[#014486]"
                         >
                           {recommendation.ctaLabel}
                           <ArrowRight className="h-3.5 w-3.5" />
@@ -549,7 +549,7 @@ export function DashboardShell({
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {overview.summaryCards.map((card) => (
             <DashboardCardFrame
               key={card.id}
@@ -574,14 +574,14 @@ export function DashboardShell({
             footerLabel="View Report"
             footerTo="/records"
           >
-            <div className="space-y-3 pt-1">
+            <div className="space-y-2 pt-1">
               {overview.recentRecords.length > 0 ? (
                 overview.recentRecords.map((record) => (
-                  <div key={record.id} className="rounded-2xl border border-[#e5e7eb] bg-[#fafbfc] p-3.5">
+                  <div key={record.id} className="rounded-xl border border-[#e5e7eb] bg-[#fafbfc] p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-[#16325c]">{record.title}</p>
-                        <p className="mt-1 truncate text-sm text-slate-500">{record.subtitle}</p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">{record.subtitle}</p>
                       </div>
                       <span className={cn('inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold', recordStatusClasses[record.statusTone])}>
                         {record.statusLabel}
@@ -591,7 +591,7 @@ export function DashboardShell({
                       {record.stageLabel ? <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1">{record.stageLabel}</span> : null}
                       <span>{record.meta}</span>
                     </div>
-                    <Link to={record.to} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#0176d3]">
+                    <Link to={record.to} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#0176d3]">
                       Open
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
@@ -615,14 +615,14 @@ export function DashboardShell({
             footerLabel="View Report"
             footerTo="/records"
           >
-            <div className="space-y-3 pt-1">
+            <div className="space-y-2 pt-1">
               {overview.queueItems.length > 0 ? (
                 overview.queueItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-[#e5e7eb] bg-[#fafbfc] p-3.5">
+                  <div key={item.id} className="rounded-xl border border-[#e5e7eb] bg-[#fafbfc] p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#16325c]">{item.title}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-500">{item.description}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
                       </div>
                       <span className={cn('inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold', queuePriorityClasses[item.priorityTone])}>
                         {item.priorityLabel}
@@ -630,7 +630,7 @@ export function DashboardShell({
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <p className="text-xs text-slate-500">{item.meta}</p>
-                      <Link to={item.to} className="inline-flex items-center gap-1 text-sm font-medium text-[#0176d3]">
+                      <Link to={item.to} className="inline-flex items-center gap-1 text-xs font-medium text-[#0176d3]">
                         {item.ctaLabel}
                         <ArrowRight className="h-3.5 w-3.5" />
                       </Link>
@@ -652,13 +652,13 @@ export function DashboardShell({
             footerLabel="View Report"
             footerTo="/account"
           >
-            <div className="space-y-3 pt-1">
+            <div className="space-y-2 pt-1">
               {overview.setupItems.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-[#e5e7eb] bg-[#fafbfc] p-3.5">
+                <div key={item.id} className="rounded-xl border border-[#e5e7eb] bg-[#fafbfc] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-[#16325c]">{item.label}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">{item.detail}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
                     </div>
                     <span className={cn('inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold', setupStatusClasses[item.status])}>
                       {item.statusLabel}
@@ -670,7 +670,7 @@ export function DashboardShell({
           </DashboardCardFrame>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {overview.healthItems.map((item) => {
             const Icon = getIcon(item.icon);
             return (
@@ -678,7 +678,7 @@ export function DashboardShell({
                 key={item.id}
                 to={item.to}
                 className={cn(
-                  'rounded-[18px] border p-4 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:bg-white',
+                  'rounded-2xl border p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition hover:bg-white',
                   healthStatusClasses[item.status],
                 )}
               >
@@ -686,8 +686,8 @@ export function DashboardShell({
                   <Icon className="h-4 w-4 text-[#0176d3]" />
                   <p className="text-sm font-semibold">{item.label}</p>
                 </div>
-                <p className="mt-3 text-lg font-semibold text-[#16325c]">{item.value}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-500">{item.hint}</p>
+                <p className="mt-2 text-base font-semibold text-[#16325c]">{item.value}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{item.hint}</p>
               </Link>
             );
           })}
